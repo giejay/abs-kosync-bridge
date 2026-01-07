@@ -24,7 +24,7 @@ sleep 3
 
 # Start the web server in the background
 echo "  🌐 Starting web interface..."
-python /app/web_server.py &
+python -m debugpy --listen 0.0.0.0:5678 /app/web_server.py &
 WEB_PID=$!
 
 echo ""

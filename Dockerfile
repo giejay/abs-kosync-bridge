@@ -53,6 +53,7 @@ COPY start.sh /app/start.sh
 RUN chmod +x /app/start.sh
 
 EXPOSE 5757
+EXPOSE 5678
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
   CMD curl -f http://localhost:5757/ || exit 1
