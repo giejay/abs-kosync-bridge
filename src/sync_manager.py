@@ -458,6 +458,7 @@ class SyncManager:
         """
         # 1. If a job is already running, let it finish.
         if self._job_thread and self._job_thread.is_alive():
+            logger.debug("[JOBS] Background job already running, skipping new job start.")
             return
 
         # 2. Find ONE pending book/job to start using database service
@@ -469,6 +470,7 @@ class SyncManager:
         # Get books with pending status
         pending_books = self.database_service.get_books_by_status('pending')
         for book in pending_books:
+            logger.debug(f"[JOBS] Eligible pending book: {sanitize_log_data(getattr(book, 'abs_title', str(book)))} (status: pending)")
             eligible_books.append(book)
             if not target_book:
                 target_book = book
@@ -485,19 +487,28 @@ class SyncManager:
 
                     # Skip if max retries exceeded
                     if retry_count >= max_retries:
+                        logger.debug(f"[JOBS] Skipping {sanitize_log_data(getattr(book, 'abs_title', str(book)))}: max retries exceeded ({retry_count} >= {max_retries})")
                         continue
 
                     # Check if enough time has passed since last attempt
                     if time.time() - last_attempt > retry_delay_mins * 60:
+                        logger.debug(f"[JOBS] Eligible failed book for retry: {sanitize_log_data(getattr(book, 'abs_title', str(book)))} (retries: {retry_count}, last_attempt: {last_attempt})")
                         eligible_books.append(book)
                         if not target_book:
                             target_book = book
+                    else:
+                        logger.debug(f"[JOBS] Skipping {sanitize_log_data(getattr(book, 'abs_title', str(book)))}: retry delay not met (wait {retry_delay_mins} min, last_attempt: {last_attempt})")
+                else:
+                    logger.debug(f"[JOBS] No job record found for failed book: {sanitize_log_data(getattr(book, 'abs_title', str(book)))}")
 
         if not target_book:
+            logger.debug("[JOBS] No eligible pending or retryable jobs found.")
             return
 
         total_jobs = len(eligible_books)
         job_idx = (eligible_books.index(target_book) + 1) if total_jobs else 1
+
+        logger.debug(f"[JOBS] Selected job to run: {sanitize_log_data(getattr(target_book, 'abs_title', str(target_book)))} (index {job_idx}/{total_jobs})")
 
         # 3. Mark book as 'processing' and create/update job record
         logger.info(f"[JOB {job_idx}/{total_jobs}] Starting background transcription: {sanitize_log_data(target_book.abs_title)}")
@@ -757,7 +768,6 @@ class SyncManager:
                     continue  # No valid states to process
 
                 # Check for ABS offline condition (only for audiobook mode)
-                # Check for ABS offline condition (only for audiobook mode)
                 if not (hasattr(book, 'sync_mode') and book.sync_mode == 'ebook_only'):
                     abs_state = config.get('ABS')
                     if abs_state is None:
@@ -769,61 +779,32 @@ class SyncManager:
                              logger.debug(f"[{abs_id}] [{title_snip}] ABS audiobook offline and no other clients, skipping")
                              continue  # ABS offline and no fallback possible
 
-
-
-                # Check for sync delta threshold between clients
-                progress_values = [cfg.current.get('pct', 0) for cfg in config.values() if cfg.current.get('pct') is not None]
-                significant_diff = False
-
-                if len(progress_values) >= 2:
-                    max_progress = max(progress_values)
-                    min_progress = min(progress_values)
-                    progress_diff = max_progress - min_progress
-
-                    if progress_diff >= self.sync_delta_between_clients:
-                        significant_diff = True
-                        # If we have a significant diff, we verify it's not just noise
-                        # by checking if we have at least one valid state
-                        logger.debug(f"[{abs_id}] [{title_snip}] Detected discrepancies between clients ({progress_diff:.2%}), forcing sync check even if deltas are 0")
-                        logger.debug(f"[{abs_id}] [{title_snip}] Client discrepancy detected: {min_progress:.1%} to {max_progress:.1%}")
-                    else:
-                        logger.debug(f"[{abs_id}] [{title_snip}] Progress difference {progress_diff:.2%} below threshold {self.sync_delta_between_clients:.2%} - skipping sync")
-                        # Do not continue here, let the consolidated check handle it
-
-                # Check for Character Delta Threshold (Fix 2B)
-                # Loop through ebook clients (KoSync, Storyteller, BookLore, ABS_Ebook)
-                # If state.delta > 0 and book has epub, get total chars via extract_text_and_map
-                # Calculate char_delta = int(state.delta * total_chars)
-                # If char_delta >= self.delta_chars_thresh, log it and set significant_diff = True
-                if not significant_diff and hasattr(book, 'ebook_filename') and book.ebook_filename:
+                # Only check for threshold-based changes
+                char_threshold_triggered = False
+                if hasattr(book, 'ebook_filename') and book.ebook_filename:
                     for client_name_key, client_state in config.items():
-                         if client_state.delta > 0:
-                             try:
-                                 # Use existing ebook_parser which has caching
-                                 full_text, _ = self.ebook_parser.extract_text_and_map(book.ebook_filename)
-                                 if full_text:
-                                     total_chars = len(full_text)
-                                     char_delta = int(client_state.delta * total_chars)
+                        if client_state.delta > 0:
+                            try:
+                                full_text, _ = self.ebook_parser.extract_text_and_map(book.ebook_filename)
+                                if full_text:
+                                    total_chars = len(full_text)
+                                    char_delta = int(client_state.delta * total_chars)
+                                    if char_delta >= self.delta_chars_thresh:
+                                        logger.info(f"[{abs_id}] [{title_snip}] Significant character change detected for {client_name_key}: {char_delta} chars (Threshold: {self.delta_chars_thresh})")
+                                        char_threshold_triggered = True
+                                        break
+                            except Exception as e:
+                                logger.warning(f"Failed to check char delta for {client_name_key}: {e}")
 
-                                     if char_delta >= self.delta_chars_thresh:
-                                         logger.info(f"[{abs_id}] [{title_snip}] Significant character change detected for {client_name_key}: {char_delta} chars (Threshold: {self.delta_chars_thresh})")
-                                         significant_diff = True
-                                         break
-                             except Exception as e:
-                                 logger.warning(f"Failed to check char delta for {client_name_key}: {e}")
-
-                # Check if all 'delta' fields in config are zero
-                # We typically skip if nothing changed, BUT if there is a significant discrepancy
-                # between clients (e.g. from a fresh push to DB), we must proceed to sync them.
                 deltas_zero = all(round(cfg.delta, 4) == 0 for cfg in config.values())
 
-                # If nothing changed AND clients are effectively in sync, skip
-                if deltas_zero and not significant_diff:
+                # If nothing changed AND no char threshold triggered, skip
+                if deltas_zero and not char_threshold_triggered:
                     logger.debug(f"[{abs_id}] [{title_snip}] No changes and clients in sync, skipping")
                     continue
 
-                if significant_diff:
-                    logger.debug(f"[{abs_id}] [{title_snip}] Proceeding due to client discrepancy")
+                if char_threshold_triggered:
+                    logger.debug(f"[{abs_id}] [{title_snip}] Proceeding due to character delta threshold")
 
                 # Small changes (below thresholds) should be noisy-reduced
                 small_changes = []
@@ -841,15 +822,10 @@ class SyncManager:
                         small_changes.append(f"✋ [{abs_id}] [{title_snip}] {label} delta {delta_str} (Below threshold)")
 
                 if small_changes and not any(cfg.delta >= cfg.threshold for cfg in config.values()):
-                    # If we have significant discrepancies between clients, we MUST NOT skip,
-                    # even if individual deltas are small (e.g. from DB pre-update).
-                    if significant_diff:
-                        logger.debug(f"[{abs_id}] [{title_snip}] Proceeding with sync despite small deltas due to client discrepancies.")
-                    else:
-                        for s in small_changes:
-                            logger.info(s)
-                        # No further action for only-small changes
-                        continue
+                    for s in small_changes:
+                        logger.info(s)
+                    # No further action for only-small changes
+                    continue
 
                 # At this point we have a significant change to act on
                 logger.info(f"🔄 [{abs_id}] [{title_snip}] Change detected")

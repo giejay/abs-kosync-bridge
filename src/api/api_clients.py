@@ -404,6 +404,7 @@ class KoSyncClient:
     def is_configured(self):
         enabled_val = os.environ.get("KOSYNC_ENABLED", "").lower()
         if enabled_val == 'false':
+            logger.debug("[KoSyncClient] KOSYNC_ENABLED is set to 'false'. Not configured.")
             return False
         return bool(self.base_url and self.user)
 

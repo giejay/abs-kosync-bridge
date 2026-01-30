@@ -607,39 +607,47 @@ def restart_server():
 
 def settings():
     # Application Defaults
+    # Use docker-compose env file defaults if present, fallback to hardcoded defaults
     DEFAULTS = {
-        'TZ': 'America/New_York',
-        'LOG_LEVEL': 'INFO',
-        'DATA_DIR': '/data',
-        'BOOKS_DIR': '/books',
-        'ABS_COLLECTION_NAME': 'Synced with KOReader',
-        'BOOKLORE_SHELF_NAME': 'Kobo',
-        'SYNC_PERIOD_MINS': '5',
-        'SYNC_DELTA_ABS_SECONDS': '60',
-        'SYNC_DELTA_KOSYNC_PERCENT': '0.5',
-        'SYNC_DELTA_BETWEEN_CLIENTS_PERCENT': '0.5',
-        'SYNC_DELTA_KOSYNC_WORDS': '400',
-        'FUZZY_MATCH_THRESHOLD': '80',
-        'WHISPER_MODEL': 'tiny',
-        'JOB_MAX_RETRIES': '5',
-        'JOB_RETRY_DELAY_MINS': '15',
-        'MONITOR_INTERVAL': '3600',
-        'LINKER_BOOKS_DIR': '/linker_books',
-        'PROCESSING_DIR': '/processing',
-        'STORYTELLER_INGEST_DIR': '/linker_books',
-        'AUDIOBOOKS_DIR': '/audiobooks',
-        'ABS_PROGRESS_OFFSET_SECONDS': '0',
-        'EBOOK_CACHE_SIZE': '3',
-        'KOSYNC_HASH_METHOD': 'content',
-        'TELEGRAM_LOG_LEVEL': 'ERROR',
-        'SHELFMARK_URL': '',
-        'KOSYNC_ENABLED': 'false',
-        'STORYTELLER_ENABLED': 'false',
-        'BOOKLORE_ENABLED': 'false',
-        'HARDCOVER_ENABLED': 'false',
-        'TELEGRAM_ENABLED': 'false',
-        'SUGGESTIONS_ENABLED': 'false'
+        'TZ': os.environ.get('TZ', 'America/New_York'),
+        'LOG_LEVEL': os.environ.get('LOG_LEVEL', 'INFO'),
+        'DATA_DIR': os.environ.get('DATA_DIR', '/data'),
+        'BOOKS_DIR': os.environ.get('BOOKS_DIR', '/books'),
+        'ABS_COLLECTION_NAME': os.environ.get('ABS_COLLECTION_NAME', 'Synced with KOReader'),
+        'BOOKLORE_SHELF_NAME': os.environ.get('BOOKLORE_SHELF_NAME', 'Kobo'),
+        'SYNC_PERIOD_MINS': os.environ.get('SYNC_PERIOD_MINS', '5'),
+        'SYNC_DELTA_ABS_SECONDS': os.environ.get('SYNC_DELTA_ABS_SECONDS', '60'),
+        'SYNC_DELTA_KOSYNC_PERCENT': os.environ.get('SYNC_DELTA_KOSYNC_PERCENT', '0.5'),
+        'SYNC_DELTA_BETWEEN_CLIENTS_PERCENT': os.environ.get('SYNC_DELTA_BETWEEN_CLIENTS_PERCENT', '0.5'),
+        'SYNC_DELTA_KOSYNC_WORDS': os.environ.get('SYNC_DELTA_KOSYNC_WORDS', '400'),
+        'FUZZY_MATCH_THRESHOLD': os.environ.get('FUZZY_MATCH_THRESHOLD', '80'),
+        'WHISPER_MODEL': os.environ.get('WHISPER_MODEL', 'tiny'),
+        'JOB_MAX_RETRIES': os.environ.get('JOB_MAX_RETRIES', '5'),
+        'JOB_RETRY_DELAY_MINS': os.environ.get('JOB_RETRY_DELAY_MINS', '15'),
+        'MONITOR_INTERVAL': os.environ.get('MONITOR_INTERVAL', '3600'),
+        'LINKER_BOOKS_DIR': os.environ.get('LINKER_BOOKS_DIR', '/linker_books'),
+        'PROCESSING_DIR': os.environ.get('PROCESSING_DIR', '/processing'),
+        'STORYTELLER_INGEST_DIR': os.environ.get('STORYTELLER_INGEST_DIR', os.environ.get('LINKER_BOOKS_DIR', '/linker_books')),
+        'AUDIOBOOKS_DIR': os.environ.get('AUDIOBOOKS_DIR', '/audiobooks'),
+        'ABS_PROGRESS_OFFSET_SECONDS': os.environ.get('ABS_PROGRESS_OFFSET_SECONDS', '0'),
+        'EBOOK_CACHE_SIZE': os.environ.get('EBOOK_CACHE_SIZE', '3'),
+        'KOSYNC_HASH_METHOD': os.environ.get('KOSYNC_HASH_METHOD', 'content'),
+        'TELEGRAM_LOG_LEVEL': os.environ.get('TELEGRAM_LOG_LEVEL', 'ERROR'),
+        'SHELFMARK_URL': os.environ.get('SHELFMARK_URL', ''),
+        # *_ENABLED keys will be set below
     }
+
+    # Dynamically set *_ENABLED keys based on required env vars
+    def enabled_by_env(*keys):
+        return all(os.environ.get(k) for k in keys)
+
+    # Use actual env keys from docker-compose.yml for *_ENABLED
+    DEFAULTS['KOSYNC_ENABLED'] = str(enabled_by_env('KOSYNC_USER', 'KOSYNC_SERVER')).lower()
+    DEFAULTS['STORYTELLER_ENABLED'] = str(enabled_by_env('STORYTELLER_API_URL', 'STORYTELLER_USER', 'STORYTELLER_PASSWORD')).lower()
+    DEFAULTS['BOOKLORE_ENABLED'] = str(enabled_by_env('BOOKLORE_SERVER', 'BOOKLORE_USER', 'BOOKLORE_PASSWORD')).lower()
+    DEFAULTS['HARDCOVER_ENABLED'] = str(enabled_by_env('HARDCOVER_TOKEN')).lower()
+    DEFAULTS['TELEGRAM_ENABLED'] = str(enabled_by_env('TELEGRAM_BOT_TOKEN')).lower()
+    DEFAULTS['SUGGESTIONS_ENABLED'] = os.environ.get('SUGGESTIONS_ENABLED', 'false')
 
     if request.method == 'POST':
         bool_keys = [
