@@ -137,7 +137,7 @@ class HardcoverSyncClient(SyncClient):
             self.hardcover_client.update_status(int(match.get('book_id')), 1, match.get('edition_id'))
             logger.info(f"📚 Hardcover: '{sanitize_log_data(meta.get('title'))}' matched and set to Want to Read (matched by {matched_by})")
         else:
-            logger.warning(f"📚 Hardcover: No match found for '{sanitize_log_data(meta.get('title'))}'")
+            logger.info(f"📚 Hardcover: No match found for '{sanitize_log_data(meta.get('title'))}'")
 
     def set_manual_match(self, book_abs_id: str, input_str: str) -> bool:
         """

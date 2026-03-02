@@ -375,7 +375,7 @@ class ABSClient:
             target_collection = next((c for c in collections if c.get('name') == collection_name), None)
 
             if not target_collection:
-                logger.warning(f"Collection '{collection_name}' not found, cannot remove item {item_id}")
+                logger.info(f"Collection '{collection_name}' not found, cannot remove item {item_id}")
                 return False
 
             # Remove from collection
@@ -386,7 +386,7 @@ class ABSClient:
                 logger.info(f"🗑️ Removed item {item_id} from ABS Collection: {collection_name}")
                 return True
             else:
-                logger.warning(f"Failed to remove item {item_id} from collection {collection_name}: {r_remove.status_code} - {r_remove.text}")
+                logger.info(f"Failed to remove item {item_id} from collection {collection_name}: {r_remove.status_code} - {r_remove.text}")
                 return False
 
         except Exception as e:

@@ -180,9 +180,6 @@ class Job(Base):
     def __repr__(self):
         return f"<Job(abs_id='{self.abs_id}', retries={self.retry_count})>"
 
-
-
-
 class PendingSuggestion(Base):
     """
     Model for progress-triggered ebook suggestions.

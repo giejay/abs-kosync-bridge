@@ -189,11 +189,7 @@ class HardcoverClient:
                 id
                 title
                 slug
-                contributions {
-                    author {
-                        name
-                    }
-                }
+                cached_contributors
             }
         }
         """
@@ -214,8 +210,14 @@ class HardcoverClient:
             # Author Score
             author_score = 0.0
             if clean_input_author:
-                # Get all authors for this book
-                authors = [c['author']['name'].lower().strip() for c in book.get('contributions', []) if c.get('author')]
+                # Get all authors for this book from cached_contributors
+                # cached_contributors is a JSON array, may contain various contributor types
+                authors = []
+                cached_contributors = book.get('cached_contributors', [])
+                if cached_contributors and isinstance(cached_contributors, list):
+                    # Extract author names from the cached data
+                    authors = [c.get('name', '').lower().strip() for c in cached_contributors if c.get('name')]
+                
                 if authors:
                     # Find best similarity among all authors
                     author_score = max(calculate_similarity(clean_input_author, a) for a in authors)

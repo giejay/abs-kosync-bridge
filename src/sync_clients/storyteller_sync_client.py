@@ -55,7 +55,7 @@ class StorytellerSyncClient(SyncClient):
             st_pct, st_ts, st_href, st_frag = self.storyteller_client.get_progress_with_fragment(epub)
 
         if st_pct is None:
-            logger.debug("⚠️ Storyteller percentage is None - returning None for service state")
+            logger.debug("Storyteller percentage is None - returning None for service state")
             return None
 
         # Get previous Storyteller state
@@ -77,8 +77,11 @@ class StorytellerSyncClient(SyncClient):
         # This needs to be updated to work with the new interface
         epub = book.ebook_filename
         st_pct, href, frag = state.current.get('pct'), state.current.get('href'), state.current.get('frag')
-        txt = self.ebook_parser.resolve_locator_id(epub, href, frag)
+        txt = None
+        if href is not None and frag is not None:
+            txt = self.ebook_parser.resolve_locator_id(epub, href, frag)
         if not txt:
+            logger.debug(f"[{book.ebook_filename}]Falling back to percentage-based text extraction for Storyteller because locator resolution failed")
             txt = self.ebook_parser.get_text_at_percentage(epub, st_pct)
         return txt
 

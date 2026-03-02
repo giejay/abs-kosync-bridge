@@ -9,6 +9,7 @@ import schedule
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import json
+from db.database_service import DatabaseService
 from src.api.storyteller_api import StorytellerDBWithAPI
 from src.db.models import Job
 from src.db.models import State, Book, PendingSuggestion
@@ -32,14 +33,14 @@ logger = logging.getLogger(__name__)
 
 class SyncManager:
     def __init__(self,
-                 abs_client=None,
-                 booklore_client=None,
-                 hardcover_client=None,
-                 transcriber=None,
-                 ebook_parser=None,
-                 database_service=None,
-                 storyteller_client: StorytellerDBWithAPI=None,
-                 sync_clients: dict[str, SyncClient]=None,
+                 abs_client,
+                 booklore_client,
+                 hardcover_client,
+                 transcriber,
+                 ebook_parser,
+                 database_service:DatabaseService,
+                 storyteller_client: StorytellerDBWithAPI,
+                 sync_clients: dict[str, SyncClient],
                  epub_cache_dir=None,
                  data_dir=None,
                  books_dir=None):

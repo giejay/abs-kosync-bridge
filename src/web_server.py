@@ -256,6 +256,9 @@ def search_abs_audiobooks_linker(query: str):
 
 
 def copy_abs_audiobook_linker(abs_id: str, dest_folder: Path):
+    if(not ABS_API_URL or not ABS_API_TOKEN):
+        logger.error("ABS_API_URL or ABS_API_TOKEN not configured.")
+        return False
     """Copy audiobook files from ABS - Book Linker version"""
     headers = {"Authorization": f"Bearer {ABS_API_TOKEN}"}
     url = urljoin(ABS_API_URL, f"/api/items/{abs_id}")
@@ -820,10 +823,11 @@ def index():
             'states': {}
         }
 
-        if book.status == 'processing':
+        if str(book.status) == 'processing':
             job = database_service.get_latest_job(book.abs_id)
             if job:
-                mapping['job_progress'] = round((job.progress or 0.0) * 100, 1)
+                progress_value = float(job.progress) if job.progress is not None else 0.0
+                mapping['job_progress'] = round(progress_value * 100, 1)
             else:
                 mapping['job_progress'] = 0.0
 
@@ -833,7 +837,7 @@ def index():
 
         # Process each client state and store both timestamp and percentage
         for client_name, state in state_by_client.items():
-            if state.last_updated and state.last_updated > latest_update_time:
+            if state.last_updated is not None and state.last_updated > latest_update_time:
                 latest_update_time = state.last_updated
 
             # Store both timestamp and percentage for each client
@@ -915,7 +919,7 @@ def index():
             mapping['last_sync'] = "Never"
 
         # Set cover URL
-        if book.abs_id:
+        if book.abs_id is not None:
             mapping['cover_url'] = f"{manager.abs_client.base_url}/api/items/{book.abs_id}/cover?token={manager.abs_client.token}"
 
         # Add to totals for overall progress calculation
@@ -1015,7 +1019,11 @@ def trigger_monitor():
 def match():
     if request.method == 'POST':
         abs_id = request.form.get('audiobook_id')
+        if not abs_id:
+            return "Audiobook ID is required", 400
         ebook_filename = request.form.get('ebook_filename')
+        if not ebook_filename:
+            return "Ebook filename is required", 400
         audiobooks = container.abs_client().get_all_audiobooks()
         selected_ab = next((ab for ab in audiobooks if ab['id'] == abs_id), None)
         if not selected_ab: return "Audiobook not found", 404

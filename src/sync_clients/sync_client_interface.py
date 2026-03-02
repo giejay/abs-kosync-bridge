@@ -56,7 +56,7 @@ class SyncClient:
     def is_configured(self) -> bool:
         ...
 
-    def check_connection(self):
+    def check_connection(self) -> bool:
         """
         Check if the client can connect to its service.
         Should raise an exception if connection fails.

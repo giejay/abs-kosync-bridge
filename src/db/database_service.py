@@ -1,3 +1,6 @@
+# pyright: reportArgumentType=false
+# pyright: reportReturnType=false
+# pyright: ignore[reportAttributeAccessIssue]
 """
 Unified SQLAlchemy database service for abs-kosync-bridge.
 Direct model-based interface without dictionary conversions.
@@ -97,7 +100,7 @@ class DatabaseService:
         with self.get_session() as session:
             existing = session.query(Setting).filter(Setting.key == key).first()
             if existing:
-                existing.value = str(value) if value is not None else None
+                existing.value = str(value) if value is not None else None # pyright: ignore[reportAttributeAccessIssue]
                 session.flush()
                 session.refresh(existing)
                 session.expunge(existing)
