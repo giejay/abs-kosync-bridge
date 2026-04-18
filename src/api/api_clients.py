@@ -203,83 +203,26 @@ class ABSClient:
 
     def get_all_progress_raw(self):
         """Fetch all user progress in one API call."""
-        # Try specific progress endpoint first
-        url = f"{self.base_url}/api/me/progress"
+        url = f"{self.base_url}/api/me"
         try:
             r = self.session.get(url, timeout=10)
             if r.status_code == 200:
                 data = r.json()
-                items = data if isinstance(data, list) else data.get('libraryItemsInProgress', [])
+
+                # Try 'mediaInProgress' (some versions) or 'mediaProgress' (others)
+                items = data.get('mediaInProgress', [])
+                if not items:
+                    items = data.get('mediaProgress', [])
+
                 mapped_items = {item.get('libraryItemId'): item for item in items if item.get('libraryItemId')}
-                # logger.debug(f"📊 ABS Bulk Progress (Direct): {len(mapped_items)} items")
+                # logger.debug(f"📊 ABS Bulk Progress: {len(mapped_items)} items")
                 return mapped_items
-            elif r.status_code == 404:
-                # Fallback to /api/me
-                logger.debug("⚠️ /api/me/progress not found (404), falling back to /api/me")
-                url_fallback = f"{self.base_url}/api/me"
-                r2 = self.session.get(url_fallback, timeout=10)
-                if r2.status_code == 200:
-                    data = r2.json()
-                    
-                    # Try 'mediaInProgress' (some versions) or 'mediaProgress' (others)
-                    items = data.get('mediaInProgress', [])
-                    if not items:
-                        items = data.get('mediaProgress', [])
-                        
-                    return {item.get('libraryItemId'): item for item in items if item.get('libraryItemId')}
-                else:
-                    logger.warning(f"⚠️ Fallback to /api/me failed: {r2.status_code}")
             else:
                 logger.warning(f"⚠️ Failed to fetch all progress: {r.status_code}")
-                
-            return {}
+                return {}
         except Exception as e:
             logger.error(f"Error fetching all ABS progress: {e}")
             return {}
-        except Exception as e:
-            logger.error(f"Error fetching all ABS progress: {e}")
-            return {}
-
-    def get_in_progress(self, min_progress=0.01):
-        """Fetch in-progress items, optimized to avoid redundant detail fetches if possible."""
-        url = f"{self.base_url}/api/me/progress"
-        try:
-            r = self.session.get(url, timeout=10)
-            if r.status_code != 200: return []
-            data = r.json()
-            items = data if isinstance(data, list) else data.get('libraryItemsInProgress', [])
-            active_items = []
-            for item in items:
-                # Filter for audiobooks only
-                if item.get('mediaType') and item.get('mediaType') != 'audiobook': continue
-
-                duration = item.get('duration', 0)
-                current_time = item.get('currentTime', 0)
-                if duration == 0 or item.get('isFinished'): continue
-
-                pct = current_time / duration
-                if pct >= min_progress:
-                    lib_item_id = item.get('libraryItemId') or item.get('itemId')
-                    if not lib_item_id: continue
-
-                    # Return basic info without recursive detail fetch if possible
-                    # but if we need title/author we might still need it unless we have it in the list
-                    title = item.get('metadata', {}).get('title') or "Unknown"
-                    author = item.get('metadata', {}).get('authorName')
-
-                    active_items.append({
-                        "id": lib_item_id,
-                        "title": title,
-                        "author": author,
-                        "progress": pct,
-                        "duration": duration,
-                        "source": "ABS",
-                        "currentTime": current_time
-                    })
-            return active_items
-        except Exception as e:
-            logger.error(f"Error fetching ABS in-progress: {e}")
-            return []
 
     def create_session(self, abs_id):
         """Create a new ABS session for the given abs_id (item id). Returns session_id or None."""
@@ -322,7 +265,7 @@ class ABSClient:
         """Add an audiobook to a collection, creating the collection if it doesn't exist."""
         if not collection_name:
              collection_name = os.environ.get("ABS_COLLECTION_NAME", "abs-kosync")
-             
+
         try:
             collections_url = f"{self.base_url}/api/collections"
             r = self.session.get(collections_url)
@@ -381,7 +324,7 @@ class ABSClient:
             # Remove from collection
             remove_url = f"{self.base_url}/api/collections/{target_collection['id']}/book/{item_id}"
             r_remove = self.session.delete(remove_url)
-            
+
             if r_remove.status_code in [200, 201, 204]:
                 logger.info(f"🗑️ Removed item {item_id} from ABS Collection: {collection_name}")
                 return True
@@ -412,7 +355,7 @@ class KoSyncClient:
         if not self.is_configured():
             logger.warning("⚠️ KoSync not configured (skipping)")
             return False
-            
+
         is_local = '127.0.0.1' in self.base_url or 'localhost' in self.base_url
         url = f"{self.base_url}/healthcheck"
         try:

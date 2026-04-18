@@ -136,7 +136,6 @@ class BaseSyncCycleTestCase(unittest.TestCase, ABC):
 
         # Configure progress responses
         abs_client.get_progress.return_value = progress_returns['abs_progress']
-        abs_client.get_in_progress.return_value = progress_returns['abs_in_progress']
         kosync_client.get_progress.return_value = progress_returns['kosync_progress']
         storyteller_db.get_progress_with_fragment.return_value = progress_returns['storyteller_progress']
         booklore_client.get_progress.return_value = progress_returns['booklore_progress']
@@ -147,7 +146,7 @@ class BaseSyncCycleTestCase(unittest.TestCase, ABC):
         storyteller_db.update_progress.return_value = True
         booklore_client.update_progress.return_value = True
         abs_client.create_session.return_value = f"test-session-{self.expected_leader.lower()}"
-        
+
         # Configure bulk data mocks (return empty to force individual fetch fallback)
         abs_client.get_all_progress_raw.return_value = {}
         storyteller_db.get_all_positions_bulk.return_value = {}
@@ -191,14 +190,14 @@ class BaseSyncCycleTestCase(unittest.TestCase, ABC):
         # This ensures cross-format normalization picks the correct leader
         transcriber = Mock()
         transcriber.get_text_at_time.return_value = f"Sample text from {self.expected_leader} leader at {self.expected_final_pct * 100:.0f}%"
-        
+
         def find_time_for_text_side_effect(transcript_path, search_text, hint_percentage=None, book_title=None):
             """Return timestamp proportional to hint_percentage for cross-format normalization."""
             if hint_percentage is not None:
                 # Return timestamp proportional to percentage (1000s total duration)
                 return hint_percentage * 1000
             return self.expected_final_pct * 1000
-        
+
         transcriber.find_time_for_text.side_effect = find_time_for_text_side_effect
 
         # Import SyncManager and create with dependency injection
@@ -224,9 +223,11 @@ class BaseSyncCycleTestCase(unittest.TestCase, ABC):
         manager = SyncManager(
             abs_client=mocks['abs_client'],
             booklore_client=mocks['booklore_client'],
+            hardcover_client=mocks['hardcover_client'],
             transcriber=transcriber,
             ebook_parser=mocks['ebook_parser'],
             database_service=mocks['database_service'],
+            storyteller_client=mocks['storyteller_db'],
             sync_clients={
                 "ABS": abs_sync_client,
                 "ABS eBook": abs_ebook_sync_client,

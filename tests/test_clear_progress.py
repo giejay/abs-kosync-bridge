@@ -99,6 +99,8 @@ class TestClearProgressMethod(unittest.TestCase):
         self.sync_manager = SyncManager(
             abs_client=Mock(),
             booklore_client=Mock(),
+            hardcover_client=Mock(),
+            storyteller_client=Mock(),
             transcriber=Mock(),
             ebook_parser=Mock(),
             database_service=self.db_service,
@@ -121,7 +123,7 @@ class TestClearProgressMethod(unittest.TestCase):
         # Verify initial state - should have 3 state records
         initial_states = self.db_service.get_states_for_book('test-book-123')
         self.assertEqual(len(initial_states), 3, "Should start with 3 state records")
-        
+
         # Verify KoSync document exists
         self.assertIsNotNone(self.db_service.get_kosync_document('test-hash-123'))
 

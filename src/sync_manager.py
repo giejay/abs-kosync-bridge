@@ -9,7 +9,7 @@ import schedule
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import json
-from db.database_service import DatabaseService
+from src.db.database_service import DatabaseService
 from src.api.storyteller_api import StorytellerDBWithAPI
 from src.db.models import Job
 from src.db.models import State, Book, PendingSuggestion
@@ -137,16 +137,16 @@ class SyncManager:
     def _normalize_for_cross_format_comparison(self, book, config):
         """
         Normalize positions for cross-format comparison (audiobook vs ebook).
-        
+
         When syncing between audiobook (ABS) and ebook clients (KoSync, etc.),
         raw percentages are not comparable because:
         - Audiobook % = time position / total duration
         - Ebook % = text position / total text
-        
+
         These don't correlate linearly. This method converts ebook positions
         to equivalent audiobook timestamps using text-matching, enabling
         accurate comparison of "who is further in the story".
-        
+
         Returns:
             dict: {client_name: normalized_timestamp} for comparison,
                   or None if normalization not possible/needed
@@ -154,45 +154,45 @@ class SyncManager:
         # Check if we have both ABS and ebook clients in the mix
         has_abs = 'ABS' in config
         ebook_clients = [k for k in config.keys() if k != 'ABS']
-        
+
         if not has_abs or not ebook_clients:
             # Same-format sync, raw percentages are fine
             return None
-            
+
         if not book.transcript_file:
             logger.debug(f"[{book.abs_id}] No transcript available for cross-format normalization")
             return None
-            
+
         normalized = {}
-        
+
         # ABS already has timestamp
         abs_state = config['ABS']
         abs_ts = abs_state.current.get('ts', 0)
         normalized['ABS'] = abs_ts
-        
+
         # For each ebook client, get their text and find equivalent timestamp
         for client_name in ebook_clients:
             client = self.sync_clients.get(client_name)
             if not client:
                 continue
-                
+
             client_state = config[client_name]
             client_pct = client_state.current.get('pct', 0)
-            
+
             try:
                 # Get the text at the ebook's current position
                 txt = client.get_text_from_current_state(book, client_state)
                 if not txt:
                     logger.debug(f"[{book.abs_id}] Could not get text from {client_name} for normalization")
                     continue
-                    
+
                 # Find equivalent timestamp in audiobook
                 ts_for_text = self.transcriber.find_time_for_text(
                     book.transcript_file, txt,
                     hint_percentage=client_pct,
                     book_title=book.abs_title
                 )
-                
+
                 if ts_for_text is not None:
                     normalized[client_name] = ts_for_text
                     logger.debug(f"[{book.abs_id}] Normalized {client_name} {client_pct:.2%} -> {ts_for_text:.1f}s")
@@ -200,7 +200,7 @@ class SyncManager:
                     logger.debug(f"[{book.abs_id}] Could not find timestamp for {client_name} text")
             except Exception as e:
                 logger.warning(f"[{book.abs_id}] Cross-format normalization failed for {client_name}: {e}")
-                
+
         # Only return if we successfully normalized at least one ebook client
         if len(normalized) > 1:
             return normalized
@@ -244,30 +244,30 @@ class SyncManager:
         logger.info("🔍 Scanning for corrupted legacy transcripts...")
         active_books = self.database_service.get_books_by_status('active')
         count = 0
-        
+
         for book in active_books:
             if not book.transcript_file or not os.path.exists(book.transcript_file):
                 continue
-                
+
             try:
                 # Load transcript
                 # We use the transcriber's cache method or direct load
                 with open(book.transcript_file, 'r', encoding='utf-8') as f:
                     segments = json.load(f)
-                
+
                 # Validate using transcriber's method
                 is_valid, ratio = self.transcriber.validate_transcript(segments)
-                
+
                 if not is_valid:
                     logger.warning(f"⚠️ Found corrupted transcript for '{sanitize_log_data(book.abs_title)}': {ratio:.1%} overlap.")
-                    
+
                     # Mark for retry (using 'pending' as requested)
                     book.status = 'pending'
                     # Clear transcript file from DB record
                     current_file = book.transcript_file
                     book.transcript_file = None
                     self.database_service.save_book(book)
-                    
+
                     # Delete the corrupted file
                     if current_file and os.path.exists(current_file):
                         try:
@@ -275,12 +275,12 @@ class SyncManager:
                             logger.info(f"   🗑️ Deleted corrupted file: {current_file}")
                         except Exception as e:
                             logger.error(f"   ❌ Failed to delete file {current_file}: {e}")
-                            
+
                     count += 1
             except Exception as e:
                 logger.debug(f"   Skipping validation for '{book.abs_title}': {e}")
                 pass
-        
+
         if count > 0:
             logger.info(f"♻️ Scheduled {count} corrupted transcripts for re-processing.")
 
@@ -331,7 +331,7 @@ class SyncManager:
         """Check for unmapped books with progress and create suggestions."""
         suggestions_enabled_val = os.environ.get("SUGGESTIONS_ENABLED", "true")
         logger.debug(f"DEBUG: SUGGESTIONS_ENABLED env var is: '{suggestions_enabled_val}'")
-        
+
         if suggestions_enabled_val.lower() != "true":
             return
 
@@ -339,7 +339,7 @@ class SyncManager:
             # optimization: get all mapped IDs to avoid suggesting existing books (even if inactive)
             all_books = self.database_service.get_all_books()
             mapped_ids = {b.abs_id for b in all_books}
-            
+
             logger.debug(f"Checking for suggestions: {len(abs_progress_map)} books with progress, {len(mapped_ids)} already mapped")
 
             for abs_id, item_data in abs_progress_map.items():
@@ -349,7 +349,7 @@ class SyncManager:
 
                 duration = item_data.get('duration', 0)
                 current_time = item_data.get('currentTime', 0)
-                
+
                 if duration > 0:
                     pct = current_time / duration
                     if pct > 0.01:
@@ -357,8 +357,8 @@ class SyncManager:
                         if self.database_service.get_pending_suggestion(abs_id):
                             logger.debug(f"Skipping {abs_id}: suggestion already exists")
                             continue
-                        
-                        logger.debug(f"Creating suggestion for {abs_id} (progress: {pct:.1%})")    
+
+                        logger.debug(f"Creating suggestion for {abs_id} (progress: {pct:.1%})")
                         self._create_suggestion(abs_id, item_data)
                     else:
                         logger.debug(f"Skipping {abs_id}: progress {pct:.1%} below 1% threshold")
@@ -370,7 +370,7 @@ class SyncManager:
     def _create_suggestion(self, abs_id, progress_data):
         """Create a new suggestion for an unmapped book."""
         logger.info(f"💡 Found potential new book for suggestion: {abs_id}")
-        
+
         try:
             # 1. Get Details from ABS
             item = self.abs_client.get_item_details(abs_id)
@@ -384,13 +384,13 @@ class SyncManager:
             author = metadata.get('authorName')
             # Use local proxy for cover image to ensure accessibility
             cover = f"/api/cover-proxy/{abs_id}"
-            
+
             logger.debug(f"Checking suggestions for '{title}' (Author: {author})")
-            
+
             matches = []
-            
+
             found_filenames = set()
-            
+
             # 2a. Search Booklore
             if self.booklore_client and self.booklore_client.is_configured():
                 try:
@@ -431,7 +431,7 @@ class SyncManager:
                     logger.debug(f"Filesystem found {fs_matches} matches")
                 except Exception as e:
                     logger.warning(f"Filesystem search failed during suggestion: {e}")
-            
+
             # 3. Save to DB
             if not matches:
                 logger.debug(f"ℹ️ No matches found for '{title}', skipping suggestion creation.")
@@ -691,20 +691,20 @@ class SyncManager:
         if storyteller_client and hasattr(storyteller_client, 'storyteller_client'):
             if hasattr(storyteller_client.storyteller_client, 'clear_cache'):
                 storyteller_client.storyteller_client.clear_cache()
-                
+
         # Refresh Booklore cache in background
         if self.booklore_client and self.booklore_client.is_configured():
             # This triggers a refresh if needed (older than 1h), or can be forced if desired
             # Pass allow_refresh=True (default) implicitly by just checking cache
             # But we can call _refresh_book_cache directly if we want to enforce it periodically
             # For now, let's just "touch" it safely
-            pass 
+            pass
             # Actually, let's explicitly refresh if it's stale (>1h) to keep UI fast
             # Accessing internal method is dirty but effective for this patch
             if time.time() - self.booklore_client._cache_timestamp > 3600:
                 logger.info("Background refreshing Booklore cache...")
                 self.booklore_client._refresh_book_cache()
-    
+
         # Get active books directly from database service
         active_books = []
         if target_abs_id:
@@ -729,11 +729,11 @@ class SyncManager:
                 if bulk_data:
                     bulk_states_per_client[client_name] = bulk_data
                     logger.debug(f"📊 Pre-fetched bulk state for {client_name}")
-            
+
             # Check for suggestions
             if 'ABS' in bulk_states_per_client:
                 self.check_for_suggestions(bulk_states_per_client['ABS'], active_books)
-                
+
         # Main sync loop - process each active book
         for book in active_books:
             abs_id = book.abs_id
@@ -868,10 +868,10 @@ class SyncManager:
                     # Multiple clients changed or this is a discrepancy resolution
                     # Use "furthest wins" logic among changed clients (or all if none changed)
                     candidates = clients_with_delta if clients_with_delta else vals
-                    
+
                     # For cross-format sync (audiobook vs ebook), use normalized timestamps
                     normalized_positions = self._normalize_for_cross_format_comparison(book, config)
-                    
+
                     if normalized_positions and len(normalized_positions) > 1:
                         # Filter normalized positions to only include candidates
                         normalized_candidates = {k: v for k, v in normalized_positions.items() if k in candidates}
@@ -1013,9 +1013,15 @@ class SyncManager:
                 # Without this, the integrated KOSync server will reject the 0% update
                 # and the old progress will sync back on the next cycle
                 if book.kosync_doc_id:
-                    deleted = self.database_service.delete_kosync_document(book.kosync_doc_id)
-                    if deleted:
-                        logger.info(f"🗑️ Deleted KOSync document record: {book.kosync_doc_id[:8]}...")
+                    try:
+                        deleted = self.database_service.delete_kosync_document(book.kosync_doc_id)
+                        if deleted:
+                            logger.info(f"🗑️ Deleted KOSync document record: {book.kosync_doc_id[:8]}...")
+                        else:
+                            logger.warning(f"⚠️ Failed to delete KOSync document record: {book.kosync_doc_id[:8]}...")
+                    except Exception as e:
+                        logger.warning(f"⚠️ Error deleting KOSync document record: {e}")
+                        # Continue with progress clearing even if KOSync deletion fails
 
                 # Reset all sync clients to 0% progress
                 reset_results = {}
