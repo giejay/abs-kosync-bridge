@@ -111,6 +111,21 @@ services:
       
       # === OPTIONAL: Legacy Support ===
       # - /path/to/storyteller/data:/storyteller_data # Only if using SQLite sync mode
+
+  # === OPTIONAL: External Transcription Service ===
+  # Offload audio transcription to a separate container for better performance
+  # Enable via Settings > "Use External Transcriber" or set USE_EXTERNAL_TRANSCRIBER=true
+  # whisper-transcriber:
+  #   image: onerahmet/openai-whisper-asr-webservice:latest
+  #   container_name: whisper-transcriber
+  #   restart: unless-stopped
+  #   ports:
+  #     - "9000:9000"
+  #   environment:
+  #     - ASR_MODEL=base              # Options: tiny, base, small, medium, large
+  #     - ASR_ENGINE=faster_whisper
+  #   volumes:
+  #     - ./whisper-models:/root/.cache/whisper
 ```
 
 ### 3. Deploy
@@ -160,7 +175,8 @@ Access the UI at `http://your-ip:8080`.
 > [!TIP]
 > **Check the Logs**: Documentation and live logs are available directly in the Web UI, or via `docker compose logs -f`.
 
-- **Transcription taking too long?** Try setting `WHISPER_MODEL=tiny` in the Settings page.
+- **Transcription taking too long?** Try setting `WHISPER_MODEL=tiny` in the Settings page. Alternatively, enable the external transcriber service (see below) for better performance and resource isolation.
+- **Using external transcription**: The project includes a separate `whisper-transcriber` service in `docker-compose.yml` for microservice-style architecture. Enable it in Settings > "Use External Transcriber" or set `USE_EXTERNAL_TRANSCRIBER=true`. This offloads heavy transcription work and can be scaled independently.
 - **Books not showing up?** Ensure your `/books` volume is correctly mounted and readable.
 - **Syncing backwards?** The system includes anti-regression, but you can "Clear Progress" for a book in the Dashboard to reset its state.
 

@@ -115,6 +115,19 @@ services:
       - PROCESSING_DIR=/processing
       - AUDIOBOOKS_DIR=/audiobooks
       - STORYTELLER_INGEST_DIR=/storyteller/library
+      
+      # ============================================
+      # Transcription Settings (OPTIONAL)
+      # ============================================
+      # Use external whisper-transcriber service instead of local transcription
+      # Requires whisper-transcriber service to be running (see below)
+      # - USE_EXTERNAL_TRANSCRIBER=true
+      # - EXTERNAL_TRANSCRIBER_URL=http://whisper-transcriber:9000
+      # 
+      # Local transcription model (only used if external transcriber disabled)
+      # Options: tiny, base, small, medium, large (larger = more accurate but slower)
+      # - WHISPER_MODEL=base
+      
       # ============================================
       # Telegram Logging Integration (OPTIONAL)
       # ============================================
@@ -150,6 +163,24 @@ services:
     ports:
       - "8080:5757"
 
+    networks:
+      - your-network
+
+  whisper-transcriber:
+    image: onerahmet/openai-whisper-asr-webservice:latest
+    container_name: whisper-transcriber
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+    environment:
+      # Whisper model size: tiny, base, small, medium, large
+      # base = good balance of speed and accuracy (~1GB RAM)
+      - ASR_MODEL=base
+      # Use faster_whisper engine for better performance
+      - ASR_ENGINE=faster_whisper
+    volumes:
+      # Cache for downloaded models
+      - ./whisper-models:/root/.cache/whisper
     networks:
       - your-network
 

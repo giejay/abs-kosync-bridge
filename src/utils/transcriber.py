@@ -41,6 +41,10 @@ class AudioTranscriber:
         self.cache_root.mkdir(parents=True, exist_ok=True)
 
         self.model_size = os.environ.get("WHISPER_MODEL", "base")
+        
+        # External transcription service configuration
+        self.use_external_transcriber = os.environ.get("USE_EXTERNAL_TRANSCRIBER", "false").lower() == "true"
+        self.external_transcriber_url = os.environ.get("EXTERNAL_TRANSCRIBER_URL", "http://whisper-transcriber:9000")
 
         self._transcript_cache = OrderedDict()
         self._cache_capacity = 3
@@ -242,6 +246,50 @@ class AudioTranscriber:
 
         return new_files if new_files else [file_path]
 
+    def _transcribe_with_external_api(self, audio_file_path: Path) -> list:
+        """
+        Transcribe audio file using external whisper-asr-webservice.
+        
+        Args:
+            audio_file_path: Path to the audio file to transcribe
+            
+        Returns:
+            List of segments with start, end, and text
+        """
+        try:
+            url = f"{self.external_transcriber_url}/asr"
+            params = {
+                "task": "transcribe",
+                "encode": "true",
+                "output": "json"
+            }
+            
+            with open(audio_file_path, 'rb') as f:
+                files = {'audio_file': (audio_file_path.name, f, 'audio/wav')}
+                response = requests.post(url, files=files, params=params, timeout=600)
+                response.raise_for_status()
+            
+            result = response.json()
+            
+            # Convert the API response to our standard format
+            segments = []
+            if 'segments' in result:
+                for seg in result['segments']:
+                    segments.append({
+                        'start': seg['start'],
+                        'end': seg['end'],
+                        'text': seg['text'].strip()
+                    })
+            
+            return segments
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"External transcription API error: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"Failed to transcribe with external API: {e}")
+            raise
+
     @time_execution
     def process_audio(self, abs_id, audio_urls, progress_callback=None):
         output_file = self.transcripts_dir / f"{abs_id}.json"
@@ -334,9 +382,13 @@ class AudioTranscriber:
 
             # Phase 2: Transcribe
             logger.info(f"✅ All parts cached. Starting transcription ({len(downloaded_files)} chunks)...")
-            logger.info(f"🧠 Phase 2: Transcribing using {self.model_size} model...")
-
-            model = WhisperModel(self.model_size, device="cpu", compute_type="int8", cpu_threads=4)
+            
+            if self.use_external_transcriber:
+                logger.info(f"🌐 Phase 2: Transcribing using external service at {self.external_transcriber_url}...")
+                model = None  # No local model needed
+            else:
+                logger.info(f"🧠 Phase 2: Transcribing using local {self.model_size} model...")
+                model = WhisperModel(self.model_size, device="cpu", compute_type="int8", cpu_threads=4)
 
             total_chunks = len(downloaded_files)
             # Calculate total audio duration for progress reporting
@@ -352,16 +404,27 @@ class AudioTranscriber:
                 logger.info(f"   [{pct:.0f}%] Transcribing chunk {idx + 1}/{total_chunks} ({duration/60:.1f} min)...")
 
                 try:
-                    segments, info = model.transcribe(str(local_path), beam_size=1, best_of=1)
+                    if self.use_external_transcriber:
+                        # Use external API
+                        segments_list = self._transcribe_with_external_api(local_path)
+                        for segment in segments_list:
+                            full_transcript.append({
+                                "start": segment['start'] + cumulative_duration,
+                                "end": segment['end'] + cumulative_duration,
+                                "text": segment['text']
+                            })
+                    else:
+                        # Use local model
+                        segments, info = model.transcribe(str(local_path), beam_size=1, best_of=1)
 
-                    segment_count = 0
-                    for segment in segments:
-                        full_transcript.append({
-                            "start": segment.start + cumulative_duration,
-                            "end": segment.end + cumulative_duration,
-                            "text": segment.text.strip()
-                        })
-                        segment_count += 1
+                        segment_count = 0
+                        for segment in segments:
+                            full_transcript.append({
+                                "start": segment.start + cumulative_duration,
+                                "end": segment.end + cumulative_duration,
+                                "text": segment.text.strip()
+                            })
+                            segment_count += 1
 
                 except Exception as e:
                     logger.error(f"   ❌ Transcription failed for {local_path.name}: {e}")

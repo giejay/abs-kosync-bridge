@@ -655,6 +655,8 @@ def settings():
         'SYNC_DELTA_KOSYNC_WORDS': os.environ.get('SYNC_DELTA_KOSYNC_WORDS', '400'),
         'FUZZY_MATCH_THRESHOLD': os.environ.get('FUZZY_MATCH_THRESHOLD', '80'),
         'WHISPER_MODEL': os.environ.get('WHISPER_MODEL', 'tiny'),
+        'USE_EXTERNAL_TRANSCRIBER': os.environ.get('USE_EXTERNAL_TRANSCRIBER', 'false'),
+        'EXTERNAL_TRANSCRIBER_URL': os.environ.get('EXTERNAL_TRANSCRIBER_URL', 'http://whisper-transcriber:9000'),
         'JOB_MAX_RETRIES': os.environ.get('JOB_MAX_RETRIES', '5'),
         'JOB_RETRY_DELAY_MINS': os.environ.get('JOB_RETRY_DELAY_MINS', '15'),
         'MONITOR_INTERVAL': os.environ.get('MONITOR_INTERVAL', '3600'),
@@ -694,7 +696,8 @@ def settings():
             'TELEGRAM_ENABLED',
             'TELEGRAM_ENABLED',
             'SUGGESTIONS_ENABLED',
-            'ABS_ONLY_SEARCH_IN_ABS_LIBRARY_ID'
+            'ABS_ONLY_SEARCH_IN_ABS_LIBRARY_ID',
+            'USE_EXTERNAL_TRANSCRIBER'
         ]
 
         # Current settings in DB
