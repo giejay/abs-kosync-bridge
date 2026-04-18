@@ -47,6 +47,7 @@ The system keeps your progress in sync across all major platforms:
 
 ### 🤖 Automation & Reliability
 - **Background Daemon**: Configurable sync intervals for hands-off operation.
+- **Auto-Discovery**: Automatically detects and syncs recently played audiobooks with available ebooks (see [AUTO_DISCOVERY.md](AUTO_DISCOVERY.md)).
 - **Auto-Organization**: Automatic addition to ABS collections and Booklore shelves.
 - **Error Recovery**: Automatic retry logic for failed transcription or sync tasks.
 

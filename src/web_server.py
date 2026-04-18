@@ -435,13 +435,36 @@ def monitor_readaloud_files():
 
 # ---------------- SYNC MANAGER DAEMON ----------------
 
+# Global auto-discovery daemon instance
+auto_discovery = None
+
 def sync_daemon():
     """Background sync daemon running in a separate thread."""
+    global auto_discovery
+    
     try:
         # Setup schedule for sync operations
         # Use the global SYNC_PERIOD_MINS which is validated
         schedule.every(int(SYNC_PERIOD_MINS)).minutes.do(manager.sync_cycle)
         schedule.every(1).minutes.do(manager.check_pending_jobs)
+
+        # Initialize and schedule auto-discovery daemon
+        # Check environment variable for enable/disable and interval
+        auto_discovery_enabled = os.environ.get("AUTO_DISCOVERY_ENABLED", "true").lower() == "true"
+        auto_discovery_interval_hours = int(os.environ.get("AUTO_DISCOVERY_INTERVAL_HOURS", "1"))
+        auto_discovery_lookback_days = int(os.environ.get("AUTO_DISCOVERY_LOOKBACK_DAYS", "7"))
+        
+        if auto_discovery_enabled:
+            from src.auto_discovery_daemon import AutoDiscoveryDaemon
+            auto_discovery = AutoDiscoveryDaemon(
+                abs_client=container.abs_client(),
+                database_service=database_service,
+                lookback_days=auto_discovery_lookback_days
+            )
+            schedule.every(auto_discovery_interval_hours).hours.do(auto_discovery.discover_and_sync)
+            logger.info(f"🔍 Auto-discovery daemon enabled (interval: {auto_discovery_interval_hours}h, lookback: {auto_discovery_lookback_days} days)")
+        else:
+            logger.info("🔍 Auto-discovery daemon disabled")
 
         logger.info(f"🔄 Sync daemon started (period: {SYNC_PERIOD_MINS} minutes)")
 
@@ -450,6 +473,13 @@ def sync_daemon():
             manager.sync_cycle()
         except Exception as e:
             logger.error(f"Initial sync cycle failed: {e}")
+        
+        # Run initial auto-discovery if enabled
+        if auto_discovery_enabled and auto_discovery:
+            try:
+                auto_discovery.discover_and_sync()
+            except Exception as e:
+                logger.error(f"Initial auto-discovery cycle failed: {e}")
 
         # Main daemon loop
         while True:
@@ -1426,6 +1456,45 @@ def api_status():
     return jsonify({"mappings": mappings})
 
 
+def api_auto_discovery_status():
+    """Return status of auto-discovery daemon"""
+    try:
+        if auto_discovery is None:
+            return jsonify({
+                "enabled": False,
+                "message": "Auto-discovery daemon is not initialized"
+            })
+        
+        status = auto_discovery.get_status()
+        return jsonify(status)
+    except Exception as e:
+        logger.error(f"Failed to get auto-discovery status: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+def api_auto_discovery_trigger():
+    """Manually trigger auto-discovery cycle"""
+    try:
+        if auto_discovery is None:
+            return jsonify({
+                "success": False,
+                "message": "Auto-discovery daemon is not initialized"
+            }), 400
+        
+        # Run discovery in background to not block the request
+        import threading
+        thread = threading.Thread(target=auto_discovery.discover_and_sync, daemon=True)
+        thread.start()
+        
+        return jsonify({
+            "success": True,
+            "message": "Auto-discovery cycle triggered"
+        })
+    except Exception as e:
+        logger.error(f"Failed to trigger auto-discovery: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
 def logs_view():
     """Display logs frontend with filtering capabilities."""
     return render_template('logs.html')
@@ -1696,6 +1765,8 @@ def create_app(test_container=None):
     app.add_url_rule('/update-hash/<abs_id>', 'update_hash', update_hash, methods=['POST'])
     app.add_url_rule('/covers/<path:filename>', 'serve_cover', serve_cover)
     app.add_url_rule('/api/status', 'api_status', api_status)
+    app.add_url_rule('/api/auto-discovery/status', 'api_auto_discovery_status', api_auto_discovery_status)
+    app.add_url_rule('/api/auto-discovery/trigger', 'api_auto_discovery_trigger', api_auto_discovery_trigger, methods=['POST'])
     app.add_url_rule('/logs', 'logs_view', logs_view)
     app.add_url_rule('/api/logs', 'api_logs', api_logs)
     app.add_url_rule('/api/logs/live', 'api_logs_live', api_logs_live)

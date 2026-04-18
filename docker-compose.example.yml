@@ -97,6 +97,16 @@ services:
       - SYNC_ABS_EBOOK_CAN_BE_LEADER=true
 
       # ============================================
+      # Auto-Discovery Settings (OPTIONAL)
+      # ============================================
+      # Automatically discover and sync recently played audiobooks with available ebooks
+      - AUTO_DISCOVERY_ENABLED=true
+      # How often to check for new books (hours)
+      - AUTO_DISCOVERY_INTERVAL_HOURS=1
+      # How far back to check for activity (days)
+      - AUTO_DISCOVERY_LOOKBACK_DAYS=7
+
+      # ============================================
       # Book Linker Settings (OPTIONAL)
       # ============================================
       # For Storyteller automated processing workflow
