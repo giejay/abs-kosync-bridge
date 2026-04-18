@@ -33,6 +33,8 @@ class AutoDiscoveryDaemon:
     def __init__(self,
                  abs_client,
                  database_service: DatabaseService,
+                 ebook_parser=None,
+                 booklore_client=None,
                  epub_cache_dir: Path = None,
                  lookback_days: int = 7):
         """
@@ -41,11 +43,15 @@ class AutoDiscoveryDaemon:
         Args:
             abs_client: Audiobookshelf API client
             database_service: Database service for book management
+            ebook_parser: Ebook parser for calculating KOSync hash
+            booklore_client: Booklore client for fetching ebooks
             epub_cache_dir: Directory to cache downloaded ebooks
             lookback_days: How many days back to check for activity (default: 7)
         """
         self.abs_client = abs_client
         self.database_service = database_service
+        self.ebook_parser = ebook_parser
+        self.booklore_client = booklore_client
         self.lookback_days = lookback_days
 
         # Setup cache directory
@@ -232,11 +238,43 @@ class AutoDiscoveryDaemon:
             title = metadata.get('title', 'Unknown')
             duration = media.get('duration', 0)
 
+            # Calculate KOSync document ID
+            kosync_doc_id = None
+            if self.ebook_parser:
+                # Try to get booklore_id if Booklore is configured
+                booklore_id = None
+                if self.booklore_client and self.booklore_client.is_configured():
+                    try:
+                        book_info = self.booklore_client.find_book_by_filename(ebook_filename)
+                        if book_info:
+                            booklore_id = book_info.get('id')
+                            # Try to get hash from Booklore download
+                            content = self.booklore_client.download_book(booklore_id)
+                            if content:
+                                kosync_doc_id = self.ebook_parser.get_kosync_id_from_bytes(ebook_filename, content)
+                                if kosync_doc_id:
+                                    logger.debug(f"[{item_id}] Computed KOSync ID from Booklore: {kosync_doc_id}")
+                    except Exception as e:
+                        logger.debug(f"[{item_id}] Failed to get hash from Booklore: {e}")
+                
+                # Fall back to cached file if hash not yet calculated
+                if not kosync_doc_id:
+                    cached_path = self.epub_cache_dir / ebook_filename
+                    if cached_path.exists():
+                        kosync_doc_id = self.ebook_parser.get_kosync_id(cached_path)
+                        if kosync_doc_id:
+                            logger.debug(f"[{item_id}] Computed KOSync ID from cached file: {kosync_doc_id}")
+            
+            if not kosync_doc_id:
+                logger.warning(f"[{item_id}] Could not compute KOSync ID for '{sanitize_log_data(ebook_filename)}'")
+                # Still create the book but log the issue - it can be fixed later via "Update Hash" button
+
             # Create book record with 'pending' status to trigger job queue
             book = Book(
                 abs_id=item_id,
                 abs_title=title,
                 ebook_filename=ebook_filename,
+                kosync_doc_id=kosync_doc_id,
                 status='pending',  # This will trigger the job queue
                 duration=duration
             )

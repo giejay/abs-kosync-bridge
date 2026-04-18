@@ -459,6 +459,8 @@ def sync_daemon():
             auto_discovery = AutoDiscoveryDaemon(
                 abs_client=container.abs_client(),
                 database_service=database_service,
+                ebook_parser=container.ebook_parser(),
+                booklore_client=container.booklore_client(),
                 lookback_days=auto_discovery_lookback_days
             )
             schedule.every(auto_discovery_interval_hours).hours.do(auto_discovery.discover_and_sync)
