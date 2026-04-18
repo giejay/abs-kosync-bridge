@@ -75,6 +75,12 @@ class AutoDiscoveryDaemon:
 
             recent_items = []
             for item_id, progress_data in progress_map.items():
+                # Skip completed/finished books
+                is_finished = progress_data.get('isFinished', False)
+                if is_finished:
+                    logger.debug(f"[{item_id}] Skipping completed book")
+                    continue
+
                 # Check if item was updated recently
                 last_update = progress_data.get('lastUpdate', 0)
                 if isinstance(last_update, (int, float)):
@@ -89,8 +95,8 @@ class AutoDiscoveryDaemon:
 
                         if duration > 0:
                             progress_pct = current_time / duration
-                            # Include items with at least 1% progress
-                            if progress_pct >= 0.01:
+                            # Include items with at least 1% progress but not finished
+                            if 0.01 <= progress_pct < 1.0:
                                 recent_items.append({
                                     'id': item_id,
                                     'duration': duration,

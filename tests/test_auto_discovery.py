@@ -90,7 +90,8 @@ class TestAutoDiscoveryDaemon(unittest.TestCase):
             'old-item': {
                 'duration': 10000,
                 'currentTime': 5000,
-                'lastUpdate': old_time
+                'lastUpdate': old_time,
+                'isFinished': False
             }
         }
 
@@ -98,6 +99,38 @@ class TestAutoDiscoveryDaemon(unittest.TestCase):
 
         # Should be empty because item is too old
         self.assertEqual(len(items), 0)
+
+    def test_get_recently_played_items_excludes_finished(self):
+        """Test that finished/completed books are excluded from discovery."""
+        current_time = time.time()
+
+        self.mock_abs_client.get_all_progress_raw.return_value = {
+            'finished-item': {
+                'duration': 10000,
+                'currentTime': 10000,
+                'lastUpdate': current_time,
+                'isFinished': True  # Marked as finished
+            },
+            'active-item': {
+                'duration': 10000,
+                'currentTime': 5000,
+                'lastUpdate': current_time,
+                'isFinished': False  # Not finished
+            },
+            'completed-item': {
+                'duration': 8000,
+                'currentTime': 8000,  # 100% progress
+                'lastUpdate': current_time
+                # No isFinished field, but progress is 100%
+            }
+        }
+
+        items = self.daemon.get_recently_played_items()
+
+        # Should only have active-item (not finished, <100% progress)
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0]['id'], 'active-item')
+        self.assertAlmostEqual(items[0]['progress'], 0.5, places=2)
 
     def test_get_unmapped_items(self):
         """Test filtering for unmapped items."""

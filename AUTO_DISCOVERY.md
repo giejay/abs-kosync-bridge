@@ -5,11 +5,13 @@ The Auto-Discovery Daemon automatically detects recently played audiobooks in Au
 ## How It Works
 
 1. **Periodic Scanning**: Every hour (configurable), the daemon checks Audiobookshelf for items that have been played recently
-2. **Progress Filter**: Only considers items with at least 1% progress
-3. **Time Window**: By default, looks at items played in the last 7 days
-4. **Unmapped Detection**: Identifies audiobooks not yet in the sync database
-5. **Ebook Download**: Attempts to download the ebook from ABS using `/api/items/{item_id}/ebook` endpoint
-6. **Job Creation**: If ebook is available, creates a sync job automatically
+2. **Progress Filter**: Only considers items with at least 1% progress and less than 100% (excludes completed books)
+2. **Progress Filter**: Only considers items with at least 1% progress and less than 100% (excludes completed books)
+3. **Completion Filter**: Automatically excludes books marked as finished/completed in ABS
+4. **Time Window**: By default, looks at items played in the last 7 days
+5. **Unmapped Detection**: Identifies audiobooks not yet in the sync database
+6. **Ebook Download**: Attempts to download the ebook from ABS using `/api/items/{item_id}/ebook` endpoint
+7. **Job Creation**: If ebook is available, creates a sync job automatically
 
 ## Configuration
 
@@ -86,7 +88,13 @@ Response:
            ▼
 ┌─────────────────────┐
 │  Filter: Progress   │
-│  >= 1%              │
+│  1% <= P < 100%     │
+└──────────┬──────────┘
+           │
+           ▼
+┌─────────────────────┐
+│  Filter: Not        │
+│  Finished/Completed │
 └──────────┬──────────┘
            │
            ▼
@@ -142,7 +150,9 @@ The daemon logs its activity with the `🔍` emoji prefix:
 ### No items discovered
 - Check that audiobooks have ebook files attached in ABS
 - Verify the time window with `AUTO_DISCOVERY_LOOKBACK_DAYS`
-- Ensure items have sufficient progress (>1%)
+- Ensure items have sufficient progress (>1% and <100%)
+- Verify books are not marked as finished/completed in ABS
+- Check that items were played recently (within lookback period)
 
 ### Ebook download fails
 - Verify ABS permissions and API token
