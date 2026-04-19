@@ -1012,7 +1012,7 @@ class SyncManager:
                 # Delete KOSync document record to bypass "furthest wins" protection
                 # Without this, the integrated KOSync server will reject the 0% update
                 # and the old progress will sync back on the next cycle
-                if book.kosync_doc_id:
+                if book.kosync_doc_id and self.database_service.get_kosync_document(book.kosync_doc_id):
                     try:
                         deleted = self.database_service.delete_kosync_document(book.kosync_doc_id)
                         if deleted:
