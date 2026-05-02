@@ -41,7 +41,7 @@ class AudioTranscriber:
         self.cache_root.mkdir(parents=True, exist_ok=True)
 
         self.model_size = os.environ.get("WHISPER_MODEL", "base")
-        
+
         # External transcription service configuration
         self.use_external_transcriber = os.environ.get("USE_EXTERNAL_TRANSCRIBER", "false").lower() == "true"
         self.external_transcriber_url = os.environ.get("EXTERNAL_TRANSCRIBER_URL", "http://whisper-transcriber:9000")
@@ -58,21 +58,21 @@ class AudioTranscriber:
     def validate_transcript(self, segments: list, max_overlap_ratio: float = 0.05) -> tuple[bool, float]:
         """
         Validate transcript for overlapping timestamps.
-        
+
         Returns:
             (is_valid, overlap_ratio)
         """
         if not segments or len(segments) < 2:
             return True, 0.0
-        
+
         overlap_count = 0
         for i in range(1, len(segments)):
             if segments[i]['start'] < segments[i-1]['end']:
                 overlap_count += 1
-        
+
         overlap_ratio = overlap_count / len(segments)
         is_valid = overlap_ratio <= max_overlap_ratio
-        
+
         return is_valid, overlap_ratio
 
     def transcribe_from_smil(self, abs_id: str, epub_path: Path, abs_chapters: list, progress_callback=None) -> Optional[Path]:
@@ -94,18 +94,18 @@ class AudioTranscriber:
 
             # [NEW] Validate transcript before saving
             is_valid, overlap_ratio = self.validate_transcript(transcript)
-            
+
             if not is_valid:
                 logger.warning(f"⚠️ SMIL extraction failed validation: {overlap_ratio:.1%} overlap (threshold: 5%)")
                 logger.info(f"🔄 Falling back to Whisper transcription for {abs_id}")
-                
+
                 # Delete output file if it exists to ensure clean state
                 if output_file.exists():
                     try:
                         os.remove(output_file)
                     except:
                         pass
-                        
+
                 return None
 
             with open(output_file, 'w', encoding='utf-8') as f:
@@ -249,10 +249,10 @@ class AudioTranscriber:
     def _transcribe_with_external_api(self, audio_file_path: Path) -> list:
         """
         Transcribe audio file using external whisper-asr-webservice.
-        
+
         Args:
             audio_file_path: Path to the audio file to transcribe
-            
+
         Returns:
             List of segments with start, end, and text
         """
@@ -263,14 +263,14 @@ class AudioTranscriber:
                 "encode": "true",
                 "output": "json"
             }
-            
+
             with open(audio_file_path, 'rb') as f:
                 files = {'audio_file': (audio_file_path.name, f, 'audio/wav')}
-                response = requests.post(url, files=files, params=params, timeout=600)
+                response = requests.post(url, files=files, params=params, timeout=7200)
                 response.raise_for_status()
-            
+
             result = response.json()
-            
+
             # Convert the API response to our standard format
             segments = []
             if 'segments' in result:
@@ -280,9 +280,9 @@ class AudioTranscriber:
                         'end': seg['end'],
                         'text': seg['text'].strip()
                     })
-            
+
             return segments
-            
+
         except requests.exceptions.RequestException as e:
             logger.error(f"External transcription API error: {e}")
             raise
@@ -382,7 +382,7 @@ class AudioTranscriber:
 
             # Phase 2: Transcribe
             logger.info(f"✅ All parts cached. Starting transcription ({len(downloaded_files)} chunks)...")
-            
+
             if self.use_external_transcriber:
                 logger.info(f"🌐 Phase 2: Transcribing using external service at {self.external_transcriber_url}...")
                 model = None  # No local model needed
@@ -469,43 +469,43 @@ class AudioTranscriber:
     def _is_low_quality_text(self, text: str, min_word_count: int = 3) -> bool:
         """
         Check if transcript segment text is low-quality for sync purposes.
-        
+
         Low quality includes:
         - Very short segments (< min_word_count words)
         - Audio markers like [Music], [Applause], etc.
         - Empty or whitespace-only text
         - Single-word utterances (often "um", "uh", chapter numbers)
-        
+
         Returns:
             True if the text is considered low quality
         """
         if not text:
             return True
-        
+
         cleaned = text.strip()
         if not cleaned:
             return True
-        
+
         # Check for common audio markers (case-insensitive)
-        markers = ['[music]', '[applause]', '[laughter]', '[silence]', '[sound]', 
+        markers = ['[music]', '[applause]', '[laughter]', '[silence]', '[sound]',
                    '[inaudible]', '[noise]', '[background]', '♪', '🎵']
         lower_text = cleaned.lower()
         for marker in markers:
             if marker in lower_text:
                 return True
-        
+
         # Check word count
         words = cleaned.split()
         if len(words) < min_word_count:
             return True
-        
+
         return False
 
     def get_text_at_time(self, transcript_path, timestamp):
         """
         Get text context around a specific timestamp.
         Returns ~800 characters of context for better matching.
-        
+
         Uses look-ahead/look-behind when the exact timestamp falls on
         low-quality content (pauses, music, short utterances).
         """
@@ -593,7 +593,7 @@ class AudioTranscriber:
                 if seg['start'] <= timestamp <= seg['end']:
                     target_idx = i
                     break
-            
+
             # If explicit match not found, find closest
             if target_idx == -1:
                 closest_dist = float('inf')
@@ -606,7 +606,7 @@ class AudioTranscriber:
             if target_idx > 0:
                 prev_text = data[target_idx - 1]['text']
                 return self._clean_text(prev_text)
-            
+
             return None
 
         except Exception as e:
