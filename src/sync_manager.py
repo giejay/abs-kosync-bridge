@@ -780,48 +780,49 @@ class SyncManager:
                              logger.debug(f"[{abs_id}] [{title_snip}] ABS audiobook offline and no other clients, skipping")
                              continue  # ABS offline and no fallback possible
 
-                deltas_zero = all(round(cfg.delta, 4) == 0 for cfg in config.values())
+                if target_abs_id is None:
+                    deltas_zero = all(round(cfg.delta, 4) == 0 for cfg in config.values())
 
-                # If nothing changed AND no char threshold triggered, skip
-                if deltas_zero:
-                    logger.debug(f"[{abs_id}] [{title_snip}] No changes and clients in sync, skipping")
-                    continue
+                    # If nothing changed AND no char threshold triggered, skip
+                    if deltas_zero:
+                        logger.debug(f"[{abs_id}] [{title_snip}] No changes and clients in sync, skipping")
+                        continue
 
-                # Small changes (below thresholds) should be noisy-reduced
-                small_changes = []
-                for key, cfg in config.items():
-                    delta = cfg.delta
-                    threshold = cfg.threshold
+                    # Small changes (below thresholds) should be noisy-reduced
+                    small_changes = []
+                    for key, cfg in config.items():
+                        delta = cfg.delta
+                        threshold = cfg.threshold
 
-                    # Debug logging for potential None values
-                    if delta is None or threshold is None:
-                         logger.debug(f"[{title_snip}] {key} delta={delta}, threshold={threshold}")
+                        # Debug logging for potential None values
+                        if delta is None or threshold is None:
+                            logger.debug(f"[{title_snip}] {key} delta={delta}, threshold={threshold}")
 
-                    if delta is not None and threshold is not None and 0 < delta < threshold:
-                        label, fmt = cfg.display
-                        delta_str = cfg.value_seconds_formatter(delta) if cfg.value_seconds_formatter else cfg.value_formatter(delta)
-                        small_changes.append(f"✋ [{abs_id}] [{title_snip}] {label} delta {delta_str} (Below threshold)")
+                        if delta is not None and threshold is not None and 0 < delta < threshold:
+                            label, fmt = cfg.display
+                            delta_str = cfg.value_seconds_formatter(delta) if cfg.value_seconds_formatter else cfg.value_formatter(delta)
+                            small_changes.append(f"✋ [{abs_id}] [{title_snip}] {label} delta {delta_str} (Below threshold)")
 
-                if small_changes and not any(cfg.delta >= cfg.threshold for cfg in config.values()):
-                    for s in small_changes:
-                        logger.info(s)
-                    # No further action for only-small changes
-                    continue
+                    if small_changes and not any(cfg.delta >= cfg.threshold for cfg in config.values()):
+                        for s in small_changes:
+                            logger.info(s)
+                        # No further action for only-small changes
+                        continue
 
-                # At this point we have a significant change to act on
-                logger.info(f"🔄 [{abs_id}] [{title_snip}] Change detected")
+                    # At this point we have a significant change to act on
+                    logger.info(f"🔄 [{abs_id}] [{title_snip}] Change detected")
 
-                # Status block - show only changed lines
-                status_lines = []
-                for key, cfg in config.items():
-                    if cfg.delta > 0:
-                        prev = cfg.previous_pct
-                        curr = cfg.current.get('pct')
-                        label, fmt = cfg.display
-                        status_lines.append(f"📊 {label}: {fmt.format(prev=prev, curr=curr)}")
+                    # Status block - show only changed lines
+                    status_lines = []
+                    for key, cfg in config.items():
+                        if cfg.delta > 0:
+                            prev = cfg.previous_pct
+                            curr = cfg.current.get('pct')
+                            label, fmt = cfg.display
+                            status_lines.append(f"📊 {label}: {fmt.format(prev=prev, curr=curr)}")
 
-                for line in status_lines:
-                    logger.info(line)
+                    for line in status_lines:
+                        logger.info(line)
 
                 # Build vals from config - only include clients that can be leaders
                 vals = {}

@@ -131,18 +131,17 @@
                 <form method="POST" action="/clear-progress/{{ mapping.abs_id }}" class="flex-1-mr-6">
                     <button type="submit" class="action-btn warning"
                         onclick="return confirm('Clear all progress for this book? This will set progress to 0% on all systems.')">
-                        🔄 Clear
+                        🧹 Clear
                     </button>
                 </form>
-              <form method="POST" action="/clear-progress/{{ mapping.abs_id }}" class="flex-1-mr-6">
-                <button type="submit" class="action-btn warning"
-                        onclick="return confirm('Clear all progress for this book? This will set progress to 0% on all systems.')">
-                  🔄 Clear
-                </button>
-              </form>
+              <form method="POST" action="/delete/{{ mapping.abs_id }}" class="flex-1">
+                    <button type="submit" class="action-btn danger" onclick="return confirm('Delete this book?')">
+                        🗑️ Delete
+                    </button>
+                </form>
               <form method="POST" action="/force-sync/{{ mapping.abs_id }}" class="flex-1">
-                  <button type="submit" class="action-btn info">
-                      Sync
+                  <button type="submit" class="action-btn info" onclick="return confirm('Start sync for this book?')">
+                       🔄 Sync
                   </button>
               </form>
             </div>

@@ -75,7 +75,7 @@ class KoSyncSyncClient(SyncClient):
         locator = request.locator_result
         # use perfect_ko_xpath if available
         xpath = locator.perfect_ko_xpath if locator and locator.perfect_ko_xpath else locator.xpath
-        logger.info(f"[{book.abs_title}] Trying to update KoSync progress to %.4f%% (ko_id: %s) at xpath: %s", pct*100, book.title if book else 'Unknown', ko_id, xpath)
+        logger.info(f"[{book.abs_title}] Trying to update KoSync progress to %.4f%% (ko_id: %s) at xpath: %s", pct*100, ko_id, xpath)
         success = self.kosync_client.update_progress(ko_id, pct, xpath)
         updated_state = {
             'pct': pct,
