@@ -780,32 +780,12 @@ class SyncManager:
                              logger.debug(f"[{abs_id}] [{title_snip}] ABS audiobook offline and no other clients, skipping")
                              continue  # ABS offline and no fallback possible
 
-                # Only check for threshold-based changes
-                char_threshold_triggered = False
-                if hasattr(book, 'ebook_filename') and book.ebook_filename:
-                    for client_name_key, client_state in config.items():
-                        if client_state.delta > 0:
-                            try:
-                                full_text, _ = self.ebook_parser.extract_text_and_map(book.ebook_filename)
-                                if full_text:
-                                    total_chars = len(full_text)
-                                    char_delta = int(client_state.delta * total_chars)
-                                    if char_delta >= self.delta_chars_thresh:
-                                        logger.info(f"[{abs_id}] [{title_snip}] Significant character change detected for {client_name_key}: {char_delta} chars (Threshold: {self.delta_chars_thresh})")
-                                        char_threshold_triggered = True
-                                        break
-                            except Exception as e:
-                                logger.warning(f"Failed to check char delta for {client_name_key}: {e}")
-
                 deltas_zero = all(round(cfg.delta, 4) == 0 for cfg in config.values())
 
                 # If nothing changed AND no char threshold triggered, skip
-                if deltas_zero and not char_threshold_triggered:
+                if deltas_zero:
                     logger.debug(f"[{abs_id}] [{title_snip}] No changes and clients in sync, skipping")
                     continue
-
-                if char_threshold_triggered:
-                    logger.debug(f"[{abs_id}] [{title_snip}] Proceeding due to character delta threshold")
 
                 # Small changes (below thresholds) should be noisy-reduced
                 small_changes = []
@@ -890,8 +870,6 @@ class SyncManager:
                         leader = max(candidates, key=candidates.get)
                         leader_pct = vals[leader]
                         logger.info(f"📖 [{abs_id}] [{title_snip}] {leader} leads at {config[leader].value_formatter(leader_pct)}")
-
-                leader_formatter = config[leader].value_formatter
 
                 leader_client = self.sync_clients[leader]
                 leader_state = config[leader]

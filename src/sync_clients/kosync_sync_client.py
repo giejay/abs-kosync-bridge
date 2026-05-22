@@ -65,16 +65,17 @@ class KoSyncSyncClient(SyncClient):
 
     def update_progress(self, book: Book, request: UpdateProgressRequest) -> SyncResult:
         ko_id = book.kosync_doc_id if book else None
-        
+
         # Don't attempt update if ko_id is missing
         if not ko_id:
             logger.warning(f"⚠️ Skipping KoSync update - kosync_doc_id is missing for book: {book.title if book else 'Unknown'}")
             return SyncResult(None, False, {})
-        
+
         pct = request.locator_result.percentage
         locator = request.locator_result
         # use perfect_ko_xpath if available
         xpath = locator.perfect_ko_xpath if locator and locator.perfect_ko_xpath else locator.xpath
+        logger.info(f"[{book.abs_title}] Trying to update KoSync progress to %.4f%% (ko_id: %s) at xpath: %s", pct*100, book.title if book else 'Unknown', ko_id, xpath)
         success = self.kosync_client.update_progress(ko_id, pct, xpath)
         updated_state = {
             'pct': pct,
