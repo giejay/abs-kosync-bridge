@@ -317,7 +317,7 @@ class CleanFlaskIntegrationTest(unittest.TestCase):
         self.assertIn('mappings', data)
         self.assertEqual(len(data['mappings']), 1)
         self.assertEqual(data['mappings'][0]['abs_id'], 'api-test-book-123')
-        
+
         # Verify percentage scaling (should be 0 because states mock returned empty list)
         # But let's verify structure
         self.assertIn('states', data['mappings'][0])
@@ -362,7 +362,7 @@ class CleanFlaskIntegrationTest(unittest.TestCase):
 
         # Verify mappings
         mapping = data['mappings'][0]
-        
+
         # Check nested states
         self.assertEqual(mapping['states']['kosync']['percentage'], 45.5)
         self.assertEqual(mapping['states']['storyteller']['percentage'], 10.0)
@@ -460,6 +460,43 @@ class CleanFlaskIntegrationTest(unittest.TestCase):
 
         print("[OK] Clear progress endpoint test passed with clean DI")
 
+    def test_force_sync_endpoint_triggers_targeted_cycle(self):
+        """Test force sync endpoint starts targeted SyncManager cycle."""
+        from src.db.models import Book
+        test_book = Book(
+            abs_id='force-sync-book',
+            abs_title='Force Sync Book',
+            ebook_filename='force-sync.epub',
+            kosync_doc_id='force-sync-doc',
+            status='active'
+        )
+        self.mock_database_service.get_book.return_value = test_book
+
+        import src.web_server
+        original_thread = src.web_server.threading.Thread
+
+        class ImmediateThread:
+            def __init__(self, target=None, args=(), kwargs=None, daemon=None):
+                self.target = target
+                self.args = args
+                self.kwargs = kwargs or {}
+
+            def start(self):
+                if self.target:
+                    self.target(*self.args, **self.kwargs)
+
+        src.web_server.threading.Thread = ImmediateThread
+
+        try:
+            response = self.client.post('/force-sync/force-sync-book')
+            data = response.get_json()
+
+            self.assertEqual(response.status_code, 202)
+            self.assertTrue(data['success'])
+            self.mock_manager.sync_cycle.assert_called_once_with(target_abs_id='force-sync-book')
+        finally:
+            src.web_server.threading.Thread = original_thread
+
     def test_settings_endpoint_clean_di(self):
         """Test settings endpoint with clean dependency injection."""
         # Mock database settings
@@ -483,13 +520,13 @@ class CleanFlaskIntegrationTest(unittest.TestCase):
             self.assertEqual(response.data, b"Settings Page HTML")
 
             # Verify database was called to load settings
-            # Note: settings() function calls database_service.get_all_settings() implicitly 
+            # Note: settings() function calls database_service.get_all_settings() implicitly
             # via ConfigLoader or os.environ?
-            # Actually, looking at the code, settings() calls database_service.get_all_settings() 
+            # Actually, looking at the code, settings() calls database_service.get_all_settings()
             # only on POST. On GET it just renders template.
             # But the template rendering uses `get_val` helper which reads from os.environ.
             # So we just verify it renders successfully.
-            
+
             mock_render.assert_called_once()
             args, _ = mock_render.call_args
             self.assertEqual(args[0], 'settings.html')

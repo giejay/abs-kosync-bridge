@@ -1271,6 +1271,26 @@ def clear_progress(abs_id):
     return redirect(url_for('index'))
 
 
+def force_sync(abs_id):
+    """Trigger an immediate targeted sync for a single book."""
+    try:
+        book = database_service.get_book(abs_id)
+        if not book:
+            return jsonify({"success": False, "error": "Book not found"}), 404
+
+        def run_targeted_sync():
+            try:
+                manager.sync_cycle(target_abs_id=abs_id)
+            except Exception as e:
+                logger.error(f"Force sync failed for {abs_id}: {e}")
+
+        threading.Thread(target=run_targeted_sync, daemon=True).start()
+        return jsonify({"success": True, "message": f"Force sync triggered for {abs_id}"}), 202
+    except Exception as e:
+        logger.error(f"Failed to trigger force sync for {abs_id}: {e}")
+        return jsonify({"success": False, "error": "Failed to trigger sync"}), 500
+
+
 def link_hardcover(abs_id):
     from flask import flash
     url = request.form.get('hardcover_url', '').strip()
@@ -1766,6 +1786,7 @@ def create_app(test_container=None):
     app.add_url_rule('/batch-match', 'batch_match', batch_match, methods=['GET', 'POST'])
     app.add_url_rule('/delete/<abs_id>', 'delete_mapping', delete_mapping, methods=['POST'])
     app.add_url_rule('/clear-progress/<abs_id>', 'clear_progress', clear_progress, methods=['POST'])
+    app.add_url_rule('/force-sync/<abs_id>', 'force_sync', force_sync, methods=['POST'])
     app.add_url_rule('/link-hardcover/<abs_id>', 'link_hardcover', link_hardcover, methods=['POST'])
     app.add_url_rule('/update-hash/<abs_id>', 'update_hash', update_hash, methods=['POST'])
     app.add_url_rule('/covers/<path:filename>', 'serve_cover', serve_cover)
