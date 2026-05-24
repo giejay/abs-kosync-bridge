@@ -206,6 +206,18 @@ class SyncManager:
             return normalized
         return None
 
+    def _validate_leader_not_backwards(self, abs_id, title_snip, leader, leader_pct, config):
+        """
+        Validate that the leader didn't scroll backwards.
+        
+        Returns:
+            bool: True if valid (leader moved forward), False if backwards scroll detected
+        """
+        prev_pct = config[leader].previous_pct
+        if leader_pct < prev_pct:
+            logger.warning(f"⚠️ [{abs_id}] [{title_snip}] Backwards scroll detected for {leader}: {config[leader].value_formatter(prev_pct)} -> {config[leader].value_formatter(leader_pct)}, skipping sync")
+            return False
+        return True
 
     def _fetch_states_parallel(self, book, prev_states_by_client, title_snip, bulk_states_per_client=None, clients_to_use=None):
         """Fetch states from specified clients (or all if not specified) in parallel."""
@@ -844,6 +856,11 @@ class SyncManager:
                     # Only one client changed - that client is the leader (most recent change wins)
                     leader = list(clients_with_delta.keys())[0]
                     leader_pct = vals[leader]
+                    
+                    # Validate that the leader didn't scroll backwards
+                    if not self._validate_leader_not_backwards(abs_id, title_snip, leader, leader_pct, config):
+                        continue
+                    
                     logger.info(f"📖 [{abs_id}] [{title_snip}] {leader} leads at {config[leader].value_formatter(leader_pct)} (only client with change)")
                 else:
                     # Multiple clients changed or this is a discrepancy resolution
@@ -860,16 +877,31 @@ class SyncManager:
                             leader = max(normalized_candidates, key=normalized_candidates.get)
                             leader_ts = normalized_candidates[leader]
                             leader_pct = vals[leader]
+                            
+                            # Validate that the leader didn't scroll backwards
+                            if not self._validate_leader_not_backwards(abs_id, title_snip, leader, leader_pct, config):
+                                continue
+                            
                             logger.info(f"📖 [{abs_id}] [{title_snip}] {leader} leads at {config[leader].value_formatter(leader_pct)} (normalized: {leader_ts:.1f}s)")
                         else:
                             # Fallback to percentage-based comparison among candidates
                             leader = max(candidates, key=candidates.get)
                             leader_pct = vals[leader]
+                            
+                            # Validate that the leader didn't scroll backwards
+                            if not self._validate_leader_not_backwards(abs_id, title_snip, leader, leader_pct, config):
+                                continue
+                            
                             logger.info(f"📖 [{abs_id}] [{title_snip}] {leader} leads at {config[leader].value_formatter(leader_pct)}")
                     else:
                         # Same-format sync or normalization failed - use raw percentages
                         leader = max(candidates, key=candidates.get)
                         leader_pct = vals[leader]
+                        
+                        # Validate that the leader didn't scroll backwards
+                        if not self._validate_leader_not_backwards(abs_id, title_snip, leader, leader_pct, config):
+                            continue
+                        
                         logger.info(f"📖 [{abs_id}] [{title_snip}] {leader} leads at {config[leader].value_formatter(leader_pct)}")
 
                 leader_client = self.sync_clients[leader]

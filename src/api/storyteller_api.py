@@ -89,6 +89,7 @@ class StorytellerAPIClient:
             return None
 
     def check_connection(self) -> bool:
+        logger.info("Checking connection to Storyteller API...")
         return bool(self._get_fresh_token())
 
     def _refresh_book_cache(self) -> bool:
@@ -263,10 +264,11 @@ class StorytellerDBWithAPI:
         self.db_fallback = None
 
         api_url = os.environ.get("STORYTELLER_API_URL")
+        api_enabled = os.environ.get("STORYTELLER_ENABLED", "").lower() != 'false'
         api_user = os.environ.get("STORYTELLER_USER")
         api_pass = os.environ.get("STORYTELLER_PASSWORD")
 
-        if api_url and api_user and api_pass:
+        if api_enabled and api_url and api_user and api_pass:
             self.api_client = StorytellerAPIClient()
             if self.api_client.check_connection():
                 logger.info("Using Storyteller REST API for sync")
