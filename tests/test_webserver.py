@@ -493,7 +493,57 @@ class CleanFlaskIntegrationTest(unittest.TestCase):
 
             self.assertEqual(response.status_code, 202)
             self.assertTrue(data['success'])
-            self.mock_manager.sync_cycle.assert_called_once_with(target_abs_id='force-sync-book')
+            self.mock_manager.sync_cycle.assert_called_once_with(
+                target_abs_id='force-sync-book',
+                forced_leader=None,
+                allow_backtrack=False,
+            )
+        finally:
+            src.web_server.threading.Thread = original_thread
+
+    def test_force_sync_endpoint_with_manual_leader_enables_backtrack(self):
+        """Test force sync accepts selected leader and enables backtracking."""
+        from src.db.models import Book
+        test_book = Book(
+            abs_id='force-sync-book',
+            abs_title='Force Sync Book',
+            ebook_filename='force-sync.epub',
+            kosync_doc_id='force-sync-doc',
+            status='active'
+        )
+        self.mock_database_service.get_book.return_value = test_book
+
+        import src.web_server
+        original_thread = src.web_server.threading.Thread
+
+        class ImmediateThread:
+            def __init__(self, target=None, args=(), kwargs=None, daemon=None):
+                self.target = target
+                self.args = args
+                self.kwargs = kwargs or {}
+
+            def start(self):
+                if self.target:
+                    self.target(*self.args, **self.kwargs)
+
+        src.web_server.threading.Thread = ImmediateThread
+
+        try:
+            response = self.client.post('/force-sync/force-sync-book', json={
+                'leader': 'KoSync',
+                'allow_backtrack': True,
+            })
+            data = response.get_json()
+
+            self.assertEqual(response.status_code, 202)
+            self.assertTrue(data['success'])
+            self.assertEqual(data['leader'], 'KoSync')
+            self.assertTrue(data['allow_backtrack'])
+            self.mock_manager.sync_cycle.assert_called_once_with(
+                target_abs_id='force-sync-book',
+                forced_leader='KoSync',
+                allow_backtrack=True,
+            )
         finally:
             src.web_server.threading.Thread = original_thread
 

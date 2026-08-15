@@ -32,7 +32,7 @@
 
             {% if mapping.status == 'active' and mapping.unified_progress > 0 and mapping.unified_progress < 100 %} <div
                 class="progress-ring reading cursor-pointer" title="Force sync this book now"
-                onclick="forceSync(event, '{{ mapping.abs_id }}')">
+                onclick="forceSyncPrompt(event, '{{ mapping.abs_id }}', '{{ mapping.sync_mode }}')">
                 {{ '%.0f' | format(mapping.unified_progress) }}%
         </div>
         {% endif %}
@@ -155,11 +155,12 @@
                         🗑️ Delete
                     </button>
                 </form>
-              <form method="POST" action="/force-sync/{{ mapping.abs_id }}" class="flex-1">
-                  <button type="submit" class="action-btn info" onclick="return confirm('Start sync for this book?')">
-                       🔄 Sync
-                  </button>
-              </form>
+                <div class="flex-1">
+                    <button type="button" class="action-btn info"
+                        onclick="forceSyncPrompt(event, '{{ mapping.abs_id }}', '{{ mapping.sync_mode }}')">
+                        🔄 Sync
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -1060,17 +1061,33 @@
                 }
             }
 
-            function forceSync(event, absId) {
+            function forceSyncPrompt(event, absId, syncMode) {
                 event.stopPropagation();
                 if (!absId) return;
 
-                fetch(`/force-sync/${encodeURIComponent(absId)}`, { method: 'POST' })
+                const allowedLeaders = syncMode === 'ebook_only'
+                    ? ['KoSync', 'Storyteller', 'Booklore', 'ABSEbook']
+                    : ['ABS', 'KoSync', 'Storyteller', 'Booklore'];
+                const selected = prompt(`Choose leader app for this force sync.\n\nOptions: ${allowedLeaders.join(', ')}\n\nBacktracking is allowed.`);
+                if (selected === null) return;
+
+                const leader = (selected || '').trim();
+                if (!allowedLeaders.includes(leader)) {
+                    alert(`Unknown leader app: ${selected}. Use exactly one of: ${allowedLeaders.join(', ')}`);
+                    return;
+                }
+
+                fetch(`/force-sync/${encodeURIComponent(absId)}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ leader, allow_backtrack: true })
+                })
                     .then(r => r.json().then(data => ({ ok: r.ok, data })))
                     .then(({ ok, data }) => {
                         if (!ok || !data.success) {
                             throw new Error(data.error || 'Failed to trigger sync');
                         }
-                        console.log('Force sync triggered:', absId);
+                        console.log('Force sync triggered:', absId, leader);
                     })
                     .catch(err => {
                         console.error('Force sync error:', err);

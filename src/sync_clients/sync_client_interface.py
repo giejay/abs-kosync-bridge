@@ -32,6 +32,8 @@ class UpdateProgressRequest:
     txt: Optional[str] = None
     # can be percentage or timestamp (ABS)
     previous_location: Optional[float] = None
+    # Manual force-sync can allow intentional backward movement.
+    allow_backtrack: bool = False
 
 @dataclass
 class SyncResult:

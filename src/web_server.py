@@ -1295,17 +1295,38 @@ def force_sync(abs_id):
         if not book:
             return jsonify({"success": False, "error": "Book not found"}), 404
 
+        payload = request.get_json(silent=True) or {}
+        selected_leader_raw = (payload.get("leader") or request.form.get("leader") or "").strip()
+        selected_leader = None
+        if selected_leader_raw:
+            allowed_leaders = {"ABS", "KoSync", "Storyteller", "Booklore", "ABSEbook"}
+            if selected_leader_raw not in allowed_leaders:
+                return jsonify({"success": False, "error": f"Unsupported leader: {selected_leader_raw}"}), 400
+            selected_leader = selected_leader_raw
+
+        allow_backtrack_raw = payload.get("allow_backtrack", request.form.get("allow_backtrack", "true" if selected_leader else "false"))
+        allow_backtrack = str(allow_backtrack_raw).lower() in ("1", "true", "yes", "on")
+
         def run_targeted_sync():
             try:
-                manager.sync_cycle(target_abs_id=abs_id)
+                manager.sync_cycle(
+                    target_abs_id=abs_id,
+                    forced_leader=selected_leader or None,
+                    allow_backtrack=allow_backtrack,
+                )
             except Exception as e:
                 logger.error(f"Force sync failed for {abs_id}: {e}")
 
         threading.Thread(target=run_targeted_sync, daemon=True).start()
-        return redirect(url_for('index'))
+        return jsonify({
+            "success": True,
+            "abs_id": abs_id,
+            "leader": selected_leader or None,
+            "allow_backtrack": allow_backtrack,
+        }), 202
     except Exception as e:
         logger.error(f"Failed to trigger force sync for {abs_id}: {e}")
-        return redirect(url_for('index'))
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 def force_create_m4b(abs_id):

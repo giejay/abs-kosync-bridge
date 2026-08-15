@@ -685,7 +685,7 @@ class SyncManager:
 
             self.database_service.save_book(book)
 
-    def sync_cycle(self, target_abs_id=None):
+    def sync_cycle(self, target_abs_id=None, forced_leader=None, allow_backtrack=False):
         """
         Run a sync cycle.
 
@@ -709,7 +709,7 @@ class SyncManager:
                  return
 
         try:
-            self._sync_cycle_internal(target_abs_id)
+            self._sync_cycle_internal(target_abs_id, forced_leader=forced_leader, allow_backtrack=allow_backtrack)
         except Exception as e:
             logger.error(f"Sync cycle internal error: {e}")
             # Log traceback for robust debugging
@@ -717,7 +717,7 @@ class SyncManager:
         finally:
             self._sync_lock.release()
 
-    def _sync_cycle_internal(self, target_abs_id=None):
+    def _sync_cycle_internal(self, target_abs_id=None, forced_leader=None, allow_backtrack=False):
         # Clear caches at start of cycle
         storyteller_client = self.sync_clients.get('Storyteller')
         if storyteller_client and hasattr(storyteller_client, 'storyteller_client'):
@@ -868,61 +868,79 @@ class SyncManager:
                     logger.warning(f"⚠️ [{abs_id}] [{title_snip}] No clients available to be leader")
                     continue
 
-                # Check which clients have changed (delta > 0)
-                # "Most recent change wins" - if only one client changed, it becomes the leader
-                clients_with_delta = {k: v for k, v in vals.items() if config[k].delta > 0}
+                forced_leader_key = None
+                if forced_leader:
+                    requested_name = str(forced_leader).strip()
+                    if requested_name in vals:
+                        forced_leader_key = requested_name
 
-                if len(clients_with_delta) == 1:
-                    # Only one client changed - that client is the leader (most recent change wins)
-                    leader = list(clients_with_delta.keys())[0]
+                if forced_leader_key:
+                    leader = forced_leader_key
                     leader_pct = vals[leader]
-                    
-                    # Validate that the leader didn't scroll backwards
-                    if not self._validate_leader_not_backwards(abs_id, title_snip, leader, leader_pct, config):
+                    if not allow_backtrack and not self._validate_leader_not_backwards(abs_id, title_snip, leader, leader_pct, config):
                         continue
-                    
-                    logger.info(f"📖 [{abs_id}] [{title_snip}] {leader} leads at {config[leader].value_formatter(leader_pct)} (only client with change)")
+                    logger.info(
+                        f"📖 [{abs_id}] [{title_snip}] Manual leader override: {leader} at {config[leader].value_formatter(leader_pct)}"
+                    )
+                elif forced_leader:
+                    logger.warning(f"⚠️ [{abs_id}] [{title_snip}] Requested leader '{forced_leader}' is not available for this sync mode/book")
+                    continue
                 else:
-                    # Multiple clients changed or this is a discrepancy resolution
-                    # Use "furthest wins" logic among changed clients (or all if none changed)
-                    candidates = clients_with_delta if clients_with_delta else vals
+                    # Check which clients have changed (delta > 0)
+                    # "Most recent change wins" - if only one client changed, it becomes the leader
+                    clients_with_delta = {k: v for k, v in vals.items() if config[k].delta > 0}
 
-                    # For cross-format sync (audiobook vs ebook), use normalized timestamps
-                    normalized_positions = self._normalize_for_cross_format_comparison(book, config)
+                    if len(clients_with_delta) == 1:
+                        # Only one client changed - that client is the leader (most recent change wins)
+                        leader = list(clients_with_delta.keys())[0]
+                        leader_pct = vals[leader]
 
-                    if normalized_positions and len(normalized_positions) > 1:
-                        # Filter normalized positions to only include candidates
-                        normalized_candidates = {k: v for k, v in normalized_positions.items() if k in candidates}
-                        if normalized_candidates:
-                            leader = max(normalized_candidates, key=normalized_candidates.get)
-                            leader_ts = normalized_candidates[leader]
-                            leader_pct = vals[leader]
-                            
-                            # Validate that the leader didn't scroll backwards
-                            if not self._validate_leader_not_backwards(abs_id, title_snip, leader, leader_pct, config):
-                                continue
-                            
-                            logger.info(f"📖 [{abs_id}] [{title_snip}] {leader} leads at {config[leader].value_formatter(leader_pct)} (normalized: {leader_ts:.1f}s)")
+                        # Validate that the leader didn't scroll backwards
+                        if not allow_backtrack and not self._validate_leader_not_backwards(abs_id, title_snip, leader, leader_pct, config):
+                            continue
+
+                        logger.info(f"📖 [{abs_id}] [{title_snip}] {leader} leads at {config[leader].value_formatter(leader_pct)} (only client with change)")
+                    else:
+                        # Multiple clients changed or this is a discrepancy resolution
+                        # Use "furthest wins" logic among changed clients (or all if none changed)
+                        candidates = clients_with_delta if clients_with_delta else vals
+
+                        # For cross-format sync (audiobook vs ebook), use normalized timestamps
+                        normalized_positions = self._normalize_for_cross_format_comparison(book, config)
+
+                        if normalized_positions and len(normalized_positions) > 1:
+                            # Filter normalized positions to only include candidates
+                            normalized_candidates = {k: v for k, v in normalized_positions.items() if k in candidates}
+                            if normalized_candidates:
+                                leader = max(normalized_candidates, key=normalized_candidates.get)
+                                leader_ts = normalized_candidates[leader]
+                                leader_pct = vals[leader]
+
+                                # Validate that the leader didn't scroll backwards
+                                if not allow_backtrack and not self._validate_leader_not_backwards(abs_id, title_snip, leader, leader_pct, config):
+                                    continue
+
+                                logger.info(f"📖 [{abs_id}] [{title_snip}] {leader} leads at {config[leader].value_formatter(leader_pct)} (normalized: {leader_ts:.1f}s)")
+                            else:
+                                # Fallback to percentage-based comparison among candidates
+                                leader = max(candidates, key=candidates.get)
+                                leader_pct = vals[leader]
+
+                                # Validate that the leader didn't scroll backwards
+                                if not allow_backtrack and not self._validate_leader_not_backwards(abs_id, title_snip, leader, leader_pct, config):
+                                    continue
+
+                                logger.info(f"📖 [{abs_id}] [{title_snip}] {leader} leads at {config[leader].value_formatter(leader_pct)}")
                         else:
-                            # Fallback to percentage-based comparison among candidates
+                            # Same-format sync or normalization failed - use raw percentages
                             leader = max(candidates, key=candidates.get)
                             leader_pct = vals[leader]
-                            
+
                             # Validate that the leader didn't scroll backwards
-                            if not self._validate_leader_not_backwards(abs_id, title_snip, leader, leader_pct, config):
+                            if not allow_backtrack and not self._validate_leader_not_backwards(abs_id, title_snip, leader, leader_pct, config):
                                 continue
-                            
+
                             logger.info(f"📖 [{abs_id}] [{title_snip}] {leader} leads at {config[leader].value_formatter(leader_pct)}")
-                    else:
-                        # Same-format sync or normalization failed - use raw percentages
-                        leader = max(candidates, key=candidates.get)
-                        leader_pct = vals[leader]
-                        
-                        # Validate that the leader didn't scroll backwards
-                        if not self._validate_leader_not_backwards(abs_id, title_snip, leader, leader_pct, config):
-                            continue
-                        
-                        logger.info(f"📖 [{abs_id}] [{title_snip}] {leader} leads at {config[leader].value_formatter(leader_pct)}")
 
                 leader_client = self.sync_clients[leader]
                 leader_state = config[leader]
@@ -960,7 +978,12 @@ class SyncManager:
                     if client_name == 'ABS' and hasattr(book, 'sync_mode') and book.sync_mode == 'ebook_only':
                         continue
                     try:
-                        request = UpdateProgressRequest(locator, txt, previous_location=config.get(client_name).previous_pct if config.get(client_name) else None)
+                        request = UpdateProgressRequest(
+                            locator,
+                            txt,
+                            previous_location=config.get(client_name).previous_pct if config.get(client_name) else None,
+                            allow_backtrack=allow_backtrack,
+                        )
                         result = client.update_progress(book, request)
                         results[client_name] = result
                     except Exception as e:
