@@ -12,7 +12,7 @@ class ChapterLanguageProfile:
 
 
 ENGLISH_PROFILE = ChapterLanguageProfile(
-    markers=("prologue", "chapter", "epilogue"),
+    markers=("prologue", "chapter", "ch.", "epilogue"),
     excluded_phrases=(
         "chapter and verse",
         "this chapter",
@@ -24,7 +24,7 @@ ENGLISH_PROFILE = ChapterLanguageProfile(
 )
 
 DUTCH_PROFILE = ChapterLanguageProfile(
-    markers=("proloog", "hoofdstuk", "epiloog"),
+    markers=("proloog", "hoofdstuk", "hst.", "hfst.", "epiloog"),
     excluded_phrases=(
         "in dit hoofdstuk",
         "volgend hoofdstuk",
