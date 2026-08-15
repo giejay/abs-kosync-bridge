@@ -215,7 +215,7 @@ class SyncManager:
         """
         prev_pct = config[leader].previous_pct
         if leader_pct < prev_pct:
-            logger.warning(f"⚠️ [{abs_id}] [{title_snip}] Backwards scroll detected for {leader}: {config[leader].value_formatter(prev_pct)} -> {config[leader].value_formatter(leader_pct)}, skipping sync")
+            logger.info(f"⚠️ [{abs_id}] [{title_snip}] Backwards scroll detected for {leader}: {config[leader].value_formatter(prev_pct)} -> {config[leader].value_formatter(leader_pct)}, skipping sync")
             return False
         return True
 
