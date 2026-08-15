@@ -31,7 +31,8 @@
             </div>
 
             {% if mapping.status == 'active' and mapping.unified_progress > 0 and mapping.unified_progress < 100 %} <div
-                class="progress-ring reading">
+                class="progress-ring reading cursor-pointer" title="Force sync this book now"
+                onclick="forceSync(event, '{{ mapping.abs_id }}')">
                 {{ '%.0f' | format(mapping.unified_progress) }}%
         </div>
         {% endif %}
@@ -134,17 +135,11 @@
                         🔄 Clear
                     </button>
                 </form>
-              <form method="POST" action="/clear-progress/{{ mapping.abs_id }}" class="flex-1-mr-6">
-                <button type="submit" class="action-btn warning"
-                        onclick="return confirm('Clear all progress for this book? This will set progress to 0% on all systems.')">
-                  🔄 Clear
-                </button>
-              </form>
-              <form method="POST" action="/force-sync/{{ mapping.abs_id }}" class="flex-1">
-                  <button type="submit" class="action-btn info">
-                      Sync
-                  </button>
-              </form>
+                <form method="POST" action="/delete/{{ mapping.abs_id }}" class="flex-1">
+                    <button type="submit" class="action-btn danger" onclick="return confirm('Delete this mapping?')">
+                        🗑️ Delete
+                    </button>
+                </form>
             </div>
         </div>
     </div>
@@ -1045,6 +1040,23 @@
                 }
             }
 
+            function forceSync(event, absId) {
+                event.stopPropagation();
+                if (!absId) return;
+
+                fetch(`/force-sync/${encodeURIComponent(absId)}`, { method: 'POST' })
+                    .then(r => r.json().then(data => ({ ok: r.ok, data })))
+                    .then(({ ok, data }) => {
+                        if (!ok || !data.success) {
+                            throw new Error(data.error || 'Failed to trigger sync');
+                        }
+                        console.log('Force sync triggered:', absId);
+                    })
+                    .catch(err => {
+                        console.error('Force sync error:', err);
+                        alert('Failed to trigger force sync. Check logs for details.');
+                    });
+            }
 
             // Initial Sort Defaults
             let sortState = {
