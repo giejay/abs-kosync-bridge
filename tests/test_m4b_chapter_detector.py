@@ -77,6 +77,24 @@ class TestM4BChapterDetector(unittest.TestCase):
         self.assertEqual(summary[140], "Chapter 10")
         self.assertNotIn(210, summary)
 
+    def test_skips_decreasing_standalone_numeric_headings(self):
+        detector = ChapterDetector(default_language="en")
+        segments = [
+            {"start": 0, "end": 10, "text": "Intro"},
+            {"start": 60, "end": 61, "text": "1"},
+            {"start": 120, "end": 121, "text": "2"},
+            {"start": 180, "end": 181, "text": "3"},
+            {"start": 240, "end": 241, "text": "1"},
+        ]
+
+        chapters = detector.detect_from_segments(segments, total_duration=600, language="en")
+        starts = [int(c["start"]) for c in chapters]
+
+        self.assertIn(60, starts)
+        self.assertIn(120, starts)
+        self.assertIn(180, starts)
+        self.assertNotIn(240, starts)
+
 
 if __name__ == "__main__":
     unittest.main()

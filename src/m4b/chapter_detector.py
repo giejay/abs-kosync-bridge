@@ -61,6 +61,7 @@ class ChapterDetector:
         starts: list[dict] = [{"start": 0.0, "title": "Chapter 1"}]
         seen_starts: set[int] = {0}
         chapter_counter = 1
+        max_standalone_number = 0
 
         min_gap_seconds = 45
 
@@ -126,7 +127,17 @@ class ChapterDetector:
             elif marker in ("epilogue", "epiloog"):
                 title = "Epilogue"
             elif standalone_chapter_number is not None:
+                if standalone_chapter_number < max_standalone_number:
+                    if self.verbose_debug:
+                        logger.debug(
+                            "[M4B][ChapterDetector] skip seg=%s reason=decreasing_standalone_number current=%s max_seen=%s",
+                            idx,
+                            standalone_chapter_number,
+                            max_standalone_number,
+                        )
+                    continue
                 chapter_counter = max(chapter_counter, standalone_chapter_number)
+                max_standalone_number = max(max_standalone_number, standalone_chapter_number)
                 title = f"Chapter {standalone_chapter_number}"
             else:
                 chapter_counter += 1
