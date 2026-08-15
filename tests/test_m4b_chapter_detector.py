@@ -31,6 +31,36 @@ class TestM4BChapterDetector(unittest.TestCase):
         self.assertEqual(len(chapters), 2)
         self.assertEqual(int(chapters[1]["start"]), 120)
 
+    def test_detects_dutch_aflevering_marker(self):
+        detector = ChapterDetector(default_language="nl")
+        segments = [
+            {"start": 0, "end": 10, "text": "Intro"},
+            {"start": 80, "end": 90, "text": "Aflevering 1"},
+            {"start": 180, "end": 190, "text": "Aflevering 2."},
+        ]
+
+        chapters = detector.detect_from_segments(segments, total_duration=500, language="nl")
+        starts = [int(c["start"]) for c in chapters]
+
+        self.assertIn(80, starts)
+        self.assertIn(180, starts)
+
+    def test_detects_standalone_english_number_word_headings(self):
+        detector = ChapterDetector(default_language="en")
+        segments = [
+            {"start": 0, "end": 10, "text": "Preface"},
+            {"start": 70, "end": 72, "text": "One"},
+            {"start": 140, "end": 142, "text": "Two."},
+            {"start": 210, "end": 214, "text": "Three and a half memories"},
+        ]
+
+        chapters = detector.detect_from_segments(segments, total_duration=500, language="en")
+        summary = {int(c["start"]): c["title"] for c in chapters}
+
+        self.assertEqual(summary[70], "Chapter 1")
+        self.assertEqual(summary[140], "Chapter 2")
+        self.assertNotIn(210, summary)
+
 
 if __name__ == "__main__":
     unittest.main()

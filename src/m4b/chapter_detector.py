@@ -7,7 +7,7 @@ import logging
 import re
 from pathlib import Path
 
-from src.m4b.language_profiles import get_profile
+from src.m4b.language_profiles import ChapterLanguageProfile, get_profile
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +54,7 @@ class ChapterDetector:
             profile = type(profile_en)(
                 markers=tuple(dict.fromkeys(profile_en.markers + profile_nl.markers)),
                 excluded_phrases=tuple(dict.fromkeys(profile_en.excluded_phrases + profile_nl.excluded_phrases)),
+                standalone_number_words=tuple(dict.fromkeys(profile_en.standalone_number_words + profile_nl.standalone_number_words)),
             )
         else:
             profile = get_profile(effective_language)
@@ -96,7 +97,10 @@ class ChapterDetector:
                 continue
 
             marker = self._match_marker(text, profile.markers)
+            standalone_chapter_number = None
             if not marker:
+                standalone_chapter_number = self._match_standalone_number_heading(text, profile)
+            if not marker and standalone_chapter_number is None:
                 if self.verbose_debug:
                     logger.debug("[M4B][ChapterDetector] skip seg=%s reason=no_marker", idx)
                 continue
@@ -121,13 +125,22 @@ class ChapterDetector:
                 title = "Prologue"
             elif marker in ("epilogue", "epiloog"):
                 title = "Epilogue"
+            elif standalone_chapter_number is not None:
+                chapter_counter = max(chapter_counter, standalone_chapter_number)
+                title = f"Chapter {standalone_chapter_number}"
             else:
                 chapter_counter += 1
                 title = f"Chapter {chapter_counter}"
 
             starts.append({"start": start, "title": title})
             seen_starts.add(rounded_start)
-            logger.debug("[M4B][ChapterDetector] detected marker=%s title=%s start=%.2f", marker, title, start)
+            logger.debug(
+                "[M4B][ChapterDetector] detected marker=%s standalone_number=%s title=%s start=%.2f",
+                marker,
+                standalone_chapter_number,
+                title,
+                start,
+            )
 
         starts = [c for c in starts if c["start"] < effective_total_duration or effective_total_duration <= 0]
         starts.sort(key=lambda x: x["start"])
@@ -147,6 +160,18 @@ class ChapterDetector:
             pattern = rf"\b{re.escape(marker)}\b"
             if re.search(pattern, text, re.IGNORECASE):
                 return marker
+        return None
+
+    @staticmethod
+    def _match_standalone_number_heading(text: str, profile: ChapterLanguageProfile) -> int | None:
+        normalized = re.sub(r"\s+", " ", text.strip().lower())
+        if not normalized:
+            return None
+
+        for word, number in profile.standalone_number_words:
+            pattern = rf"^{re.escape(word)}\.?$"
+            if re.fullmatch(pattern, normalized, re.IGNORECASE):
+                return number
         return None
 
 
