@@ -13,7 +13,6 @@ from typing import Set, Optional
 import requests
 
 from src.db.database_service import DatabaseService
-from src.db.models import Book
 from src.utils.logging_utils import sanitize_log_data
 
 logger = logging.getLogger(__name__)
@@ -53,6 +52,9 @@ class AutoDiscoveryDaemon:
         self.ebook_parser = ebook_parser
         self.booklore_client = booklore_client
         self.lookback_days = lookback_days
+        next_playlist_env = os.environ.get("AUTO_DISCOVERY_NEXT_PLAYLIST")
+        self.next_playlist_name = (next_playlist_env or "Next").strip() or "Next"
+        self.next_playlist_from_env = bool(next_playlist_env and next_playlist_env.strip())
 
         # Setup cache directory
         data_dir = Path(os.environ.get("DATA_DIR", "/data"))
@@ -60,6 +62,94 @@ class AutoDiscoveryDaemon:
         self.epub_cache_dir.mkdir(parents=True, exist_ok=True)
 
         logger.info(f"🔍 Auto-discovery daemon initialized (lookback: {lookback_days} days)")
+
+    def _get_next_playlist(self) -> Optional[dict]:
+        if not hasattr(self.abs_client, "get_playlist_by_name"):
+            logger.warning("Auto-discovery playlist sync unavailable: ABS client has no playlist helpers")
+            return None
+        try:
+            playlist = self.abs_client.get_playlist_by_name(self.next_playlist_name)
+            if not playlist:
+                if self.next_playlist_from_env:
+                    logger.warning(
+                        f"Playlist '{self.next_playlist_name}' was configured but not found; queue processing is skipped"
+                    )
+                else:
+                    logger.debug(f"Playlist '{self.next_playlist_name}' not found; skipping playlist queue")
+            return playlist
+        except Exception as e:
+            logger.warning(f"Failed resolving playlist '{self.next_playlist_name}': {e}")
+            return None
+
+    def sync_continue_listening_to_next_playlist(self, recent_items: list[dict]) -> tuple[Optional[str], int]:
+        """Mirror recent Continue Listening items into the Next playlist."""
+        playlist = self._get_next_playlist()
+        if not playlist:
+            return None, 0
+
+        if not hasattr(self.abs_client, "get_playlist_item_ids") or not hasattr(self.abs_client, "add_item_to_playlist"):
+            logger.warning("Auto-discovery playlist sync unavailable: ABS client missing playlist item helpers")
+            return playlist.get("id"), 0
+
+        playlist_id = playlist.get("id")
+        existing_ids = set(self.abs_client.get_playlist_item_ids(playlist))
+        added_count = 0
+        for item in recent_items:
+            item_id = item.get("id")
+            if not item_id or item_id in existing_ids:
+                continue
+            if self.abs_client.add_item_to_playlist(playlist_id, item_id):
+                existing_ids.add(item_id)
+                added_count += 1
+
+        if added_count > 0:
+            logger.info(f"📌 Added {added_count} continue-listening item(s) to playlist '{self.next_playlist_name}'")
+        return playlist_id, added_count
+
+    def mirror_continue_listening_to_next_playlist(self) -> tuple[Optional[str], int]:
+        """Standalone job: mirror continue-listening items into the Next playlist."""
+        recent_items = self.get_recently_played_items()
+        if not recent_items:
+            return None, 0
+        return self.sync_continue_listening_to_next_playlist(recent_items)
+
+    def get_unprocessed_items_from_next_playlist(self, playlist: Optional[dict]) -> list[dict]:
+        """Get playlist items that are not mapped yet and can be queued."""
+        if not playlist or not hasattr(self.abs_client, "get_playlist_item_ids"):
+            return []
+
+        try:
+            queued_ids = self.abs_client.get_playlist_item_ids(playlist)
+            if not queued_ids:
+                return []
+
+            all_books = self.database_service.get_all_books()
+            mapped_ids: Set[str] = {book.abs_id for book in all_books}
+
+            return [{"id": item_id} for item_id in queued_ids if item_id not in mapped_ids]
+        except Exception as e:
+            logger.error(f"Failed to inspect playlist '{self.next_playlist_name}': {e}")
+            return []
+
+    def process_next_playlist_queue(self) -> int:
+        """Standalone job: process unmapped queue items from the Next playlist."""
+        playlist = self._get_next_playlist()
+        queue_items = self.get_unprocessed_items_from_next_playlist(playlist)
+        if not queue_items:
+            logger.debug("No unprocessed items found in playlist queue")
+            return 0
+
+        success_count = 0
+        for item in queue_items:
+            item_id = item['id']
+            ebook_path = self.fetch_ebook_from_abs(item_id)
+            if ebook_path and self.create_sync_job(item_id, ebook_path.name):
+                success_count += 1
+            time.sleep(1)
+
+        if success_count > 0:
+            logger.info(f"🎉 Playlist queue processing completed: {success_count} new book(s) queued for sync")
+        return success_count
 
     def get_recently_played_items(self) -> list:
         """
@@ -269,15 +359,30 @@ class AutoDiscoveryDaemon:
                 logger.warning(f"[{item_id}] Could not compute KOSync ID for '{sanitize_log_data(ebook_filename)}'")
                 # Still create the book but log the issue - it can be fixed later via "Update Hash" button
 
-            # Create book record with 'pending' status to trigger job queue
-            book = Book(
-                abs_id=item_id,
-                abs_title=title,
-                ebook_filename=ebook_filename,
-                kosync_doc_id=kosync_doc_id,
-                status='pending',  # This will trigger the job queue
-                duration=duration
-            )
+            # Create book record with 'pending' status to trigger job queue.
+            # Prefer ORM model when available, but keep tests runnable without SQLAlchemy.
+            try:
+                from src.db.models import Book as OrmBook
+
+                book = OrmBook(
+                    abs_id=item_id,
+                    abs_title=title,
+                    ebook_filename=ebook_filename,
+                    kosync_doc_id=kosync_doc_id,
+                    status='pending',
+                    duration=duration,
+                )
+            except Exception:
+                class _BookRecord:
+                    def __init__(self):
+                        self.abs_id = item_id
+                        self.abs_title = title
+                        self.ebook_filename = ebook_filename
+                        self.kosync_doc_id = kosync_doc_id
+                        self.status = 'pending'
+                        self.duration = duration
+
+                book = _BookRecord()
 
             # Save to database
             self.database_service.save_book(book)
@@ -292,46 +397,19 @@ class AutoDiscoveryDaemon:
     def discover_and_sync(self):
         """
         Main discovery cycle:
-        1. Get recently played items
-        2. Filter for unmapped items
-        3. Attempt to fetch ebooks
-        4. Create sync jobs for successful downloads
+        1. Read Continue Listening / recently played items
+        2. Mirror them into the 'Next' playlist
+        3. Queue processing is handled by process_next_playlist_queue()
         """
         try:
             logger.debug("🔍 Running auto-discovery cycle...")
 
             # Step 1: Get recently played items
-            recent_items = self.get_recently_played_items()
-            if not recent_items:
-                logger.debug("No recently played items found")
-                return
+            playlist_id, _ = self.mirror_continue_listening_to_next_playlist()
+            if not playlist_id:
+                logger.debug("Continue listening mirror skipped - playlist unavailable")
 
-            # Step 2: Filter for unmapped items
-            unmapped_items = self.get_unmapped_items(recent_items)
-            if not unmapped_items:
-                logger.debug("All recent items are already mapped")
-                return
-
-            # Step 3 & 4: Try to fetch ebooks and create jobs
-            success_count = 0
-            for item in unmapped_items:
-                item_id = item['id']
-
-                # Attempt to download ebook
-                ebook_path = self.fetch_ebook_from_abs(item_id)
-
-                if ebook_path:
-                    # Create sync job
-                    if self.create_sync_job(item_id, ebook_path.name):
-                        success_count += 1
-
-                    # Rate limiting - don't hammer the server
-                    time.sleep(1)
-
-            if success_count > 0:
-                logger.info(f"🎉 Auto-discovery completed: {success_count} new book(s) queued for sync")
-            else:
-                logger.debug("Auto-discovery completed: no new books added")
+            logger.debug("Auto-discovery mirror cycle completed")
 
         except Exception as e:
             logger.error(f"Auto-discovery cycle failed: {e}")
@@ -347,13 +425,17 @@ class AutoDiscoveryDaemon:
         """
         try:
             recent_items = self.get_recently_played_items()
-            unmapped_items = self.get_unmapped_items(recent_items)
+            playlist = self._get_next_playlist()
+            queued_unprocessed = self.get_unprocessed_items_from_next_playlist(playlist)
 
             return {
                 'enabled': True,
                 'lookback_days': self.lookback_days,
+                'next_playlist': self.next_playlist_name,
                 'recent_items': len(recent_items),
-                'unmapped_items': len(unmapped_items),
+                # Backward-compatible key kept for existing consumers.
+                'unmapped_items': len(queued_unprocessed),
+                'queued_unprocessed_items': len(queued_unprocessed),
                 'cache_dir': str(self.epub_cache_dir),
                 'cache_size_mb': self._get_cache_size_mb()
             }

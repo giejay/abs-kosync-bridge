@@ -9,7 +9,6 @@ import tempfile
 import time
 
 from src.auto_discovery_daemon import AutoDiscoveryDaemon
-from src.db.models import Book
 
 
 class TestAutoDiscoveryDaemon(unittest.TestCase):
@@ -135,7 +134,7 @@ class TestAutoDiscoveryDaemon(unittest.TestCase):
     def test_get_unmapped_items(self):
         """Test filtering for unmapped items."""
         # Setup database to return some mapped books
-        mapped_book = Book(abs_id='mapped-1', abs_title='Mapped Book')
+        mapped_book = type("BookStub", (), {"abs_id": "mapped-1", "abs_title": "Mapped Book"})()
         self.mock_database_service.get_all_books.return_value = [mapped_book]
 
         recent_items = [
@@ -240,6 +239,12 @@ class TestAutoDiscoveryDaemon(unittest.TestCase):
                 'lastUpdate': time.time()
             }
         }
+        self.mock_abs_client.get_playlist_by_name.return_value = {
+            'id': 'playlist-next',
+            'name': 'Next',
+            'items': [{'libraryItemId': 'item-1'}],
+        }
+        self.mock_abs_client.get_playlist_item_ids.side_effect = lambda pl: ['item-1']
         self.mock_database_service.get_all_books.return_value = []
 
         status = self.daemon.get_status()
@@ -247,7 +252,7 @@ class TestAutoDiscoveryDaemon(unittest.TestCase):
         self.assertTrue(status['enabled'])
         self.assertEqual(status['lookback_days'], 7)
         self.assertEqual(status['recent_items'], 1)
-        self.assertEqual(status['unmapped_items'], 1)
+        self.assertEqual(status['queued_unprocessed_items'], 1)
 
 
 if __name__ == '__main__':

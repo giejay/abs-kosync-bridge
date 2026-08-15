@@ -1,15 +1,14 @@
 # Auto-Discovery Daemon
 
-The Auto-Discovery Daemon automatically detects recently played audiobooks in Audiobookshelf and creates sync jobs for them if an ebook is available.
+The Auto-Discovery Daemon automatically detects recently played audiobooks in Audiobookshelf, mirrors them into a playlist queue, and creates sync jobs for queue items if an ebook is available.
 
 ## How It Works
 
-1. **Periodic Scanning**: Every hour (configurable), the daemon checks Audiobookshelf for items that have been played recently
-2. **Progress Filter**: Only considers items with at least 1% progress and less than 100% (excludes completed books)
+1. **Continue Listening Mirror**: On each discovery cycle, recent Continue Listening items are added to playlist `Next` (configurable)
 2. **Progress Filter**: Only considers items with at least 1% progress and less than 100% (excludes completed books)
 3. **Completion Filter**: Automatically excludes books marked as finished/completed in ABS
 4. **Time Window**: By default, looks at items played in the last 7 days
-5. **Unmapped Detection**: Identifies audiobooks not yet in the sync database
+5. **Queue Processing Job**: A dedicated queue worker periodically checks playlist `Next` for unmapped items
 6. **Ebook Download**: Attempts to download the ebook from ABS using `/api/items/{item_id}/ebook` endpoint
 7. **Job Creation**: If ebook is available, creates a sync job automatically
 
@@ -25,7 +24,17 @@ Configure the daemon using environment variables:
 ### AUTO_DISCOVERY_INTERVAL_HOURS
 - **Type**: Integer
 - **Default**: `1`
-- **Description**: How often to run the discovery scan (in hours)
+- **Description**: How often to mirror Continue Listening into playlist `Next` (in hours)
+
+### AUTO_DISCOVERY_QUEUE_INTERVAL_MINS
+- **Type**: Integer
+- **Default**: `5`
+- **Description**: How often to process unmapped items from playlist `Next` (in minutes)
+
+### AUTO_DISCOVERY_NEXT_PLAYLIST
+- **Type**: String
+- **Default**: `Next`
+- **Description**: Playlist name used as the transcription queue
 
 ### AUTO_DISCOVERY_LOOKBACK_DAYS
 - **Type**: Integer
@@ -39,6 +48,8 @@ Configure the daemon using environment variables:
 environment:
   - AUTO_DISCOVERY_ENABLED=true
   - AUTO_DISCOVERY_INTERVAL_HOURS=2
+  - AUTO_DISCOVERY_QUEUE_INTERVAL_MINS=5
+  - AUTO_DISCOVERY_NEXT_PLAYLIST=Next
   - AUTO_DISCOVERY_LOOKBACK_DAYS=14
 ```
 
@@ -53,8 +64,9 @@ Returns current status of the auto-discovery daemon:
 {
   "enabled": true,
   "lookback_days": 7,
+  "next_playlist": "Next",
   "recent_items": 15,
-  "unmapped_items": 3,
+  "queued_unprocessed_items": 3,
   "cache_dir": "/data/epub_cache",
   "cache_size_mb": 42.5
 }
@@ -99,10 +111,16 @@ Response:
            │
            ▼
 ┌─────────────────────┐
-│  Check Database     │
-│  Already Mapped?    │
+│ Add to Playlist     │
+│ "Next" (if missing) │
 └──────────┬──────────┘
-           │ No
+           │
+           ▼
+┌─────────────────────┐
+│ Playlist Queue Job  │
+│ Unprocessed items   │
+└──────────┬──────────┘
+           │
            ▼
 ┌─────────────────────┐
 │  Download Ebook     │

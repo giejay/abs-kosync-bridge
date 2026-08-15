@@ -101,10 +101,14 @@ services:
       # ============================================
       # Automatically discover and sync recently played audiobooks with available ebooks
       - AUTO_DISCOVERY_ENABLED=true
-      # How often to check for new books (hours)
+      # How often to sync continue listening/playlist to books database (hours)
       - AUTO_DISCOVERY_INTERVAL_HOURS=1
+      # How often to process queue items from the playlist (minutes)
+      - AUTO_DISCOVERY_QUEUE_INTERVAL_MINS=60
       # How far back to check for activity (days)
       - AUTO_DISCOVERY_LOOKBACK_DAYS=7
+      # Playlist name used as transcript queue source
+      - AUTO_DISCOVERY_NEXT_PLAYLIST=Next
 
       # ============================================
       # Book Linker Settings (OPTIONAL)

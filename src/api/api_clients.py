@@ -376,6 +376,61 @@ class ABSClient:
             logger.warning(f"[M4B] ABS chapter update failed for {item_id}: {e}")
             return False
 
+    def get_playlists(self) -> list[dict]:
+        """Fetch ABS playlists from the documented endpoint."""
+        url = f"{self.base_url}/api/playlists"
+        try:
+            r = self.session.get(url, timeout=10)
+            if r.status_code != 200:
+                return []
+            payload = r.json()
+            if isinstance(payload, dict):
+                playlists = payload.get("playlists")
+                if isinstance(playlists, list):
+                    return playlists
+            if isinstance(payload, list):
+                return payload
+        except Exception:
+            return []
+        return []
+
+    def get_playlist_by_name(self, name: str) -> dict | None:
+        """Find a playlist by exact case-insensitive name."""
+        if not name:
+            return None
+        wanted = name.strip().lower()
+        for pl in self.get_playlists():
+            if str(pl.get("name", "")).strip().lower() == wanted:
+                return pl
+        return None
+
+    @staticmethod
+    def get_playlist_item_ids(playlist: dict) -> list[str]:
+        """Extract library item IDs from playlist payload returned by /api/playlists."""
+        if not isinstance(playlist, dict):
+            return []
+        items = playlist.get("items", []) or []
+        item_ids: list[str] = []
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            item_id = item.get("libraryItemId")
+            if item_id:
+                item_ids.append(str(item_id))
+        return list(dict.fromkeys(item_ids))
+
+    def add_item_to_playlist(self, playlist_id: str, item_id: str) -> bool:
+        """Add a library item to a playlist using the standard ABS endpoint."""
+        if not playlist_id or not item_id:
+            return False
+        url = f"{self.base_url}/api/playlists/{playlist_id}/item"
+        payload = {"libraryItemId": item_id}
+        try:
+            r = self.session.post(url, json=payload, timeout=10)
+            return r.status_code in (200, 201, 204)
+        except Exception:
+            return False
+
 class KoSyncClient:
     def __init__(self):
         self.base_url = os.environ.get("KOSYNC_SERVER", "").rstrip('/')

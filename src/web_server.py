@@ -452,6 +452,7 @@ def sync_daemon():
         # Check environment variable for enable/disable and interval
         auto_discovery_enabled = os.environ.get("AUTO_DISCOVERY_ENABLED", "true").lower() == "true"
         auto_discovery_interval_hours = int(os.environ.get("AUTO_DISCOVERY_INTERVAL_HOURS", "1"))
+        auto_discovery_queue_interval_mins = int(os.environ.get("AUTO_DISCOVERY_QUEUE_INTERVAL_MINS", "5"))
         auto_discovery_lookback_days = int(os.environ.get("AUTO_DISCOVERY_LOOKBACK_DAYS", "7"))
         
         if auto_discovery_enabled:
@@ -464,7 +465,11 @@ def sync_daemon():
                 lookback_days=auto_discovery_lookback_days
             )
             schedule.every(auto_discovery_interval_hours).hours.do(auto_discovery.discover_and_sync)
-            logger.info(f"🔍 Auto-discovery daemon enabled (interval: {auto_discovery_interval_hours}h, lookback: {auto_discovery_lookback_days} days)")
+            schedule.every(auto_discovery_queue_interval_mins).minutes.do(auto_discovery.process_next_playlist_queue)
+            logger.info(
+                f"🔍 Auto-discovery daemon enabled (mirror interval: {auto_discovery_interval_hours}h, "
+                f"queue interval: {auto_discovery_queue_interval_mins}m, lookback: {auto_discovery_lookback_days} days)"
+            )
         else:
             logger.info("🔍 Auto-discovery daemon disabled")
 
