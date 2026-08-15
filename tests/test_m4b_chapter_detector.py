@@ -61,6 +61,22 @@ class TestM4BChapterDetector(unittest.TestCase):
         self.assertEqual(summary[140], "Chapter 2")
         self.assertNotIn(210, summary)
 
+    def test_detects_standalone_numeric_headings_from_reverse_mapping(self):
+        detector = ChapterDetector(default_language="en")
+        segments = [
+            {"start": 0, "end": 10, "text": "Intro"},
+            {"start": 70, "end": 71, "text": "1"},
+            {"start": 140, "end": 141, "text": "10."},
+            {"start": 210, "end": 214, "text": "10 things I learned"},
+        ]
+
+        chapters = detector.detect_from_segments(segments, total_duration=500, language="en")
+        summary = {int(c["start"]): c["title"] for c in chapters}
+
+        self.assertEqual(summary[70], "Chapter 1")
+        self.assertEqual(summary[140], "Chapter 10")
+        self.assertNotIn(210, summary)
+
 
 if __name__ == "__main__":
     unittest.main()

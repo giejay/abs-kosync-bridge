@@ -168,6 +168,14 @@ class ChapterDetector:
         if not normalized:
             return None
 
+        # Reverse value check: allow exact numeric headings like "1" or "10.".
+        number_token = normalized[:-1] if normalized.endswith(".") else normalized
+        if re.fullmatch(r"\d{1,2}", number_token):
+            numeric_value = int(number_token)
+            allowed_numbers = {number for _, number in profile.standalone_number_words}
+            if numeric_value in allowed_numbers:
+                return numeric_value
+
         for word, number in profile.standalone_number_words:
             pattern = rf"^{re.escape(word)}\.?$"
             if re.fullmatch(pattern, normalized, re.IGNORECASE):

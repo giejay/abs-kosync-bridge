@@ -31,6 +31,20 @@ class TestM4BChapterDetectorDebug(unittest.TestCase):
         self.assertIsNotNone(chapter)
         self.assertEqual(chapter["title"], "Chapter 23")
 
+    def test_upper_bound_standalone_number_mappings_include_fifty(self):
+        detector = ChapterDetector(default_language="en")
+        segments = [
+            {"start": 0.0, "end": 2.0, "text": "Intro"},
+            {"start": 60.0, "end": 62.0, "text": "Fifty."},
+            {"start": 130.0, "end": 131.0, "text": "50"},
+        ]
+
+        chapters = detector.detect_from_segments(segments, total_duration=400, language="en")
+        summary = {int(c["start"]): c["title"] for c in chapters}
+
+        self.assertEqual(summary[60], "Chapter 50")
+        self.assertEqual(summary[130], "Chapter 50")
+
 
 if __name__ == "__main__":
     unittest.main()
