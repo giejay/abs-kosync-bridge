@@ -49,10 +49,6 @@ class M4BService:
             return
 
         audio_files = (item_details or {}).get("media", {}).get("audioFiles", [])
-        if self._is_already_m4b(audio_files):
-            self._update_book(book, status="not_needed", progress=1.0, error=None)
-            return
-
         self._update_book(book, status="detecting_chapters", progress=0.05, error=None)
         if progress_callback:
             progress_callback(0.15)
@@ -63,6 +59,13 @@ class M4BService:
             total_duration=total_duration,
             language=self.default_language,
         )
+        self._update_abs_chapters(book, chapters, item_details, transcript_path)
+
+        if self._is_already_m4b(audio_files):
+            self._update_book(book, status="not_needed", progress=1.0, error=None)
+            if self.trigger_abs_scan:
+                self._trigger_scan(book)
+            return
 
         source_paths, strategies = self._resolve_source_audio_paths(audio_files)
         if not source_paths:
@@ -174,9 +177,57 @@ class M4BService:
     def _trigger_scan(self, book: Book) -> None:
         try:
             if hasattr(self.abs_client, "trigger_library_scan"):
-                self.abs_client.trigger_library_scan(book.abs_id)
+                self.abs_client.trigger_library_scan()
         except Exception as exc:
             logger.warning("[M4B] ABS scan trigger failed: %s", exc)
+
+    def _update_abs_chapters(
+        self,
+        book: Book,
+        chapters: list[dict],
+        item_details: dict | None,
+        transcript_path: Path,
+    ) -> None:
+        if not chapters or len(chapters) <= 1:
+            logger.info("[M4B] Skipping ABS chapter update for %s - insufficient detected chapters", getattr(book, "abs_title", book.abs_id))
+            return
+
+        if not hasattr(self.abs_client, "update_chapters"):
+            return
+
+        media = (item_details or {}).get("media", {})
+        total_duration = float(media.get("duration") or book.duration or 0.0)
+        if total_duration <= 0:
+            try:
+                with open(transcript_path, "r", encoding="utf-8") as handle:
+                    segments = json.load(handle)
+                total_duration = max((float(seg.get("end", 0.0) or 0.0) for seg in segments), default=0.0)
+            except Exception as exc:
+                logger.debug("[M4B] Could not infer transcript duration for ABS chapter update: %s", exc)
+
+        payload = []
+        for idx, chapter in enumerate(chapters):
+            start = float(chapter.get("start", 0.0) or 0.0)
+            if idx + 1 < len(chapters):
+                end = float(chapters[idx + 1].get("start", start) or start)
+            else:
+                end = total_duration if total_duration > start else start
+
+            end = max(end - 0.001, start)
+            payload.append({
+                "id": idx,
+                "start": round(start, 3),
+                "end": round(end, 3),
+                "title": chapter.get("title") or f"Chapter {idx + 1}",
+                "error": None,
+            })
+
+        try:
+            updated = self.abs_client.update_chapters(book.abs_id, payload)
+            if not updated:
+                logger.warning("[M4B] ABS chapter update was not accepted for %s", getattr(book, "abs_title", book.abs_id))
+        except Exception as exc:
+            logger.warning("[M4B] ABS chapter update failed for %s: %s", getattr(book, "abs_title", book.abs_id), exc)
 
     def _update_book(
         self,

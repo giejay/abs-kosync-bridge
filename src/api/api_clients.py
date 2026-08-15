@@ -357,6 +357,25 @@ class ABSClient:
             logger.warning(f"[M4B] ABS scan endpoint not available: {e}")
         return False
 
+    def update_chapters(self, item_id, chapters: list[dict]):
+        """Best-effort update of ABS chapters for an existing item."""
+        if not item_id or not chapters:
+            return False
+
+        url = f"{self.base_url}/api/items/{item_id}/chapters"
+        payload = {"chapters": chapters}
+        try:
+            r = self.session.post(url, json=payload, timeout=15)
+            if r.status_code in (200, 201, 204):
+                logger.info("[M4B] Updated ABS chapters for item %s (%s chapters)", item_id, len(chapters))
+                return True
+
+            logger.warning("[M4B] ABS chapter update failed for %s: %s - %s", item_id, r.status_code, sanitize_log_data(r.text))
+            return False
+        except Exception as e:
+            logger.warning(f"[M4B] ABS chapter update failed for {item_id}: {e}")
+            return False
+
 class KoSyncClient:
     def __init__(self):
         self.base_url = os.environ.get("KOSYNC_SERVER", "").rstrip('/')
