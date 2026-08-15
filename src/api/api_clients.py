@@ -336,6 +336,27 @@ class ABSClient:
             logger.error(f"Error removing item from ABS collection: {e}")
             return False
 
+    def trigger_library_scan(self):
+        """Best-effort trigger for ABS library scan after file writes."""
+        try:
+            library_id = os.environ.get("ABS_LIBRARY_ID")
+            if library_id:
+                url = f"{self.base_url}/api/libraries/{library_id}/scan"
+                r = self.session.post(url, timeout=10)
+                if r.status_code in (200, 201, 202, 204):
+                    logger.info("[M4B] Triggered ABS scan for library %s", library_id)
+                    return True
+
+            # Fallback endpoint for some ABS variants
+            url = f"{self.base_url}/api/libraries/scan"
+            r = self.session.post(url, timeout=10)
+            if r.status_code in (200, 201, 202, 204):
+                logger.info("[M4B] Triggered ABS global library scan")
+                return True
+        except Exception as e:
+            logger.warning(f"[M4B] ABS scan endpoint not available: {e}")
+        return False
+
 class KoSyncClient:
     def __init__(self):
         self.base_url = os.environ.get("KOSYNC_SERVER", "").rstrip('/')

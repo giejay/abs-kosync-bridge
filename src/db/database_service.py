@@ -170,7 +170,10 @@ class DatabaseService:
             if existing:
                 # Update existing book
                 for attr in ['abs_title', 'ebook_filename', 'kosync_doc_id',
-                           'transcript_file', 'status', 'duration']:
+                           'transcript_file', 'status', 'duration', 'sync_mode',
+                           'm4b_status', 'm4b_progress', 'm4b_output_file', 'm4b_source_paths',
+                           'm4b_path_strategy', 'm4b_error',
+                           'm4b_updated_at']:
                     if hasattr(book, attr):
                         setattr(existing, attr, getattr(book, attr))
                 session.flush()

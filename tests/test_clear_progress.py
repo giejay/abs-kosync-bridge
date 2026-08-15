@@ -102,6 +102,7 @@ class TestClearProgressMethod(unittest.TestCase):
             hardcover_client=Mock(),
             storyteller_client=Mock(),
             transcriber=Mock(),
+            m4b_service=Mock(),
             ebook_parser=Mock(),
             database_service=self.db_service,
             sync_clients={

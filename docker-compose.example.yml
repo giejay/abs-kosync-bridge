@@ -127,6 +127,29 @@ services:
       # Local transcription model (only used if external transcriber disabled)
       # Options: tiny, base, small, medium, large (larger = more accurate but slower)
       # - WHISPER_MODEL=base
+
+      # ============================================
+      # M4B Conversion Settings (OPTIONAL)
+      # ============================================
+      # Enable M4B generation after transcript creation
+      - M4B_ENABLED=true
+      # Default behavior: save .m4b alongside source audio files when possible
+      - M4B_OUTPUT_MODE=alongside
+      # Fallback output directory when alongside path cannot be resolved/written
+      - M4B_OUTPUT_DIR=/data/m4b
+      # Optional fallback watch directory for ABS ingestion
+      # - M4B_UPLOAD_TO_ABS_WATCH_DIR=/abs_watch
+      # Host path -> container path mappings for ABS-reported file paths
+      # Format: host_prefix=>container_prefix;host_prefix2=>container_prefix2
+      # Linux example: /mnt/media/audiobooks=>/audiobooks
+      # Windows host example: D:/Media/Audiobooks=>/audiobooks
+      # - M4B_PATH_MAPPINGS=/mnt/media/audiobooks=>/audiobooks
+      # Trigger ABS library scan after M4B creation (best effort)
+      - M4B_TRIGGER_ABS_SCAN=false
+      # If false, existing .m4b files are kept and not overwritten
+      - M4B_REPLACE_IF_EXISTS=false
+      # auto = recognize both English and Dutch chapter markers
+      - M4B_LANGUAGE=auto
       
       # ============================================
       # Telegram Logging Integration (OPTIONAL)
@@ -159,6 +182,8 @@ services:
       - /path/to/audiobooks:/audiobooks
       - /path/to/processing/folder:/processing
       - /path/to/storyteller/library:/storyteller/library
+      # Optional dedicated ABS watch folder for M4B fallback output
+      # - /path/to/abs/watch/folder:/abs_watch
 
     ports:
       - "8080:5757"

@@ -37,6 +37,7 @@ class SyncManager:
                  booklore_client,
                  hardcover_client,
                  transcriber,
+                 m4b_service,
                  ebook_parser,
                  database_service:DatabaseService,
                  storyteller_client: StorytellerDBWithAPI,
@@ -51,6 +52,7 @@ class SyncManager:
         self.booklore_client = booklore_client
         self.hardcover_client = hardcover_client
         self.transcriber = transcriber
+        self.m4b_service = m4b_service
         self.ebook_parser = ebook_parser
         self.database_service = database_service
         self.storyteller_client = storyteller_client
@@ -565,16 +567,19 @@ class SyncManager:
                 """
                 Map local phase progress to global 0-100% progress.
                 Phase 1: 0-10%
-                Phase 2: 10-90%
-                Phase 3: 90-100%
+                Phase 2: 10-80%
+                Phase 3: 80-95%
+                Phase 4: 95-100%
                 """
                 global_pct = 0.0
                 if phase == 1:
                     global_pct = 0.0 + (local_pct * 0.1)
                 elif phase == 2:
-                    global_pct = 0.1 + (local_pct * 0.8)
+                    global_pct = 0.1 + (local_pct * 0.7)
                 elif phase == 3:
-                    global_pct = 0.9 + (local_pct * 0.1)
+                    global_pct = 0.8 + (local_pct * 0.15)
+                elif phase == 4:
+                    global_pct = 0.95 + (local_pct * 0.05)
 
                 # Save to DB every time for now (or throttle if too frequent)
                 self.database_service.update_latest_job(abs_id, progress=global_pct)
@@ -613,10 +618,24 @@ class SyncManager:
                 # If SMIL worked, it's already done with transcribing phase
                 update_progress(1.0, 2)
 
-            # Step 4: Parse EPUB
+            # Step 4: Convert to M4B (best-effort, does not block sync activation on failure)
+            try:
+                if self.m4b_service:
+                    self.m4b_service.process_book(
+                        book,
+                        Path(transcript_path),
+                        item_details,
+                        progress_callback=lambda p: update_progress(p, 3)
+                    )
+            except Exception as m4b_exc:
+                logger.warning(f"[M4B] Conversion failed for {sanitize_log_data(abs_title)}: {m4b_exc}")
+            finally:
+                update_progress(1.0, 3)
+
+            # Step 5: Parse EPUB
             self.ebook_parser.extract_text_and_map(
                 epub_path,
-                progress_callback=lambda p: update_progress(p, 3)
+                progress_callback=lambda p: update_progress(p, 4)
             )
 
             # --- Success Update using database service ---

@@ -64,6 +64,13 @@ class Book(Base):
     status = Column(String(50), default='active')
     duration = Column(Float)  # Duration in seconds from AudioBookShelf
     sync_mode = Column(String(20), default='audiobook')  # 'audiobook' or 'ebook_only'
+    m4b_status = Column(String(50), default='pending')
+    m4b_progress = Column(Float, default=0.0)
+    m4b_output_file = Column(String(500), nullable=True)
+    m4b_source_paths = Column(Text, nullable=True)
+    m4b_path_strategy = Column(String(50), nullable=True)
+    m4b_error = Column(Text, nullable=True)
+    m4b_updated_at = Column(Float, nullable=True)
 
     # Relationships
     states = relationship("State", back_populates="book", cascade="all, delete-orphan")
@@ -72,7 +79,10 @@ class Book(Base):
 
     def __init__(self, abs_id: str, abs_title: str = None, ebook_filename: str = None,
                  kosync_doc_id: str = None, transcript_file: str = None,
-                 status: str = 'active', duration: float = None, sync_mode: str = 'audiobook'):
+                 status: str = 'active', duration: float = None, sync_mode: str = 'audiobook',
+                 m4b_status: str = 'pending', m4b_progress: float = 0.0,
+                 m4b_output_file: str = None, m4b_source_paths: str = None,
+                 m4b_path_strategy: str = None, m4b_error: str = None, m4b_updated_at: float = None):
         self.abs_id = abs_id
         self.abs_title = abs_title
         self.ebook_filename = ebook_filename
@@ -81,6 +91,13 @@ class Book(Base):
         self.status = status
         self.duration = duration
         self.sync_mode = sync_mode
+        self.m4b_status = m4b_status
+        self.m4b_progress = m4b_progress
+        self.m4b_output_file = m4b_output_file
+        self.m4b_source_paths = m4b_source_paths
+        self.m4b_path_strategy = m4b_path_strategy
+        self.m4b_error = m4b_error
+        self.m4b_updated_at = m4b_updated_at
 
     def __repr__(self):
         return f"<Book(abs_id='{self.abs_id}', title='{self.abs_title}')>"

@@ -107,6 +107,7 @@ class TestSuggestionsFeature(unittest.TestCase):
             booklore_client=self.mock_container.mock_booklore_client,
             hardcover_client=self.mock_container.mock_hardcover_client,
             transcriber=Mock(),
+            m4b_service=Mock(),
             ebook_parser=self.mock_container.mock_ebook_parser,
             database_service=self.mock_container.mock_database_service,
             storyteller_client=self.mock_container.mock_storyteller_client,

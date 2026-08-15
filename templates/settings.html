@@ -871,6 +871,51 @@
                 </div>
             </div>
 
+            <div class="settings-section">
+                <div class="section-header">
+                    <h3>M4B Conversion</h3>
+                </div>
+                <div class="section-body">
+                    <div class="checkbox-wrapper full-width">
+                        <input type="checkbox" id="m4b_enabled" name="M4B_ENABLED" {% if get_bool('M4B_ENABLED') %}checked{% endif %}>
+                        <label for="m4b_enabled">Enable automatic M4B generation after transcript creation</label>
+                    </div>
+                    <div class="form-group">
+                        <label>Output Mode</label>
+                        <select name="M4B_OUTPUT_MODE">
+                            <option value="alongside" {% if get_val('M4B_OUTPUT_MODE', 'alongside')=='alongside' %}selected{% endif %}>alongside (next to source MP3)</option>
+                            <option value="output_dir" {% if get_val('M4B_OUTPUT_MODE')=='output_dir' %}selected{% endif %}>output_dir</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Chapter Language</label>
+                        <input type="text" name="M4B_LANGUAGE" value="{{ get_val('M4B_LANGUAGE', 'auto') }}">
+                        <div class="help-text">Use 'auto' to detect both English and Dutch chapter markers.</div>
+                    </div>
+                    <div class="form-group full-width">
+                        <label>Output Directory (fallback)</label>
+                        <input type="text" name="M4B_OUTPUT_DIR" value="{{ get_val('M4B_OUTPUT_DIR') }}">
+                    </div>
+                    <div class="form-group full-width">
+                        <label>ABS Watch Directory (optional fallback target)</label>
+                        <input type="text" name="M4B_UPLOAD_TO_ABS_WATCH_DIR" value="{{ get_val('M4B_UPLOAD_TO_ABS_WATCH_DIR') }}">
+                    </div>
+                    <div class="form-group full-width">
+                        <label>Path Mappings</label>
+                        <input type="text" name="M4B_PATH_MAPPINGS" value="{{ get_val('M4B_PATH_MAPPINGS') }}">
+                        <div class="help-text">Format: host_prefix=&gt;container_prefix;host2=&gt;container2</div>
+                    </div>
+                    <div class="checkbox-wrapper full-width">
+                        <input type="checkbox" id="m4b_scan" name="M4B_TRIGGER_ABS_SCAN" {% if get_bool('M4B_TRIGGER_ABS_SCAN') %}checked{% endif %}>
+                        <label for="m4b_scan">Trigger Audiobookshelf library scan after M4B creation</label>
+                    </div>
+                    <div class="checkbox-wrapper full-width">
+                        <input type="checkbox" id="m4b_replace" name="M4B_REPLACE_IF_EXISTS" {% if get_bool('M4B_REPLACE_IF_EXISTS') %}checked{% endif %}>
+                        <label for="m4b_replace">Replace existing M4B file if one already exists</label>
+                    </div>
+                </div>
+            </div>
+
             <div class="submit-bar">
                 <span class="restart-warn">⚠️ Application will restart instantly</span>
                 <button type="submit" class="btn btn-primary">💾 Save Settings</button>

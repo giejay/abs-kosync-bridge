@@ -671,6 +671,11 @@ def settings():
         'KOSYNC_HASH_METHOD': os.environ.get('KOSYNC_HASH_METHOD', 'content'),
         'TELEGRAM_LOG_LEVEL': os.environ.get('TELEGRAM_LOG_LEVEL', 'ERROR'),
         'SHELFMARK_URL': os.environ.get('SHELFMARK_URL', ''),
+        'M4B_OUTPUT_MODE': os.environ.get('M4B_OUTPUT_MODE', 'alongside'),
+        'M4B_OUTPUT_DIR': os.environ.get('M4B_OUTPUT_DIR', '/data/m4b'),
+        'M4B_UPLOAD_TO_ABS_WATCH_DIR': os.environ.get('M4B_UPLOAD_TO_ABS_WATCH_DIR', ''),
+        'M4B_PATH_MAPPINGS': os.environ.get('M4B_PATH_MAPPINGS', ''),
+        'M4B_LANGUAGE': os.environ.get('M4B_LANGUAGE', 'auto'),
         # *_ENABLED keys will be set below
     }
 
@@ -685,6 +690,9 @@ def settings():
     DEFAULTS['HARDCOVER_ENABLED'] = str(enabled_by_env('HARDCOVER_TOKEN')).lower()
     DEFAULTS['TELEGRAM_ENABLED'] = str(enabled_by_env('TELEGRAM_BOT_TOKEN')).lower()
     DEFAULTS['SUGGESTIONS_ENABLED'] = os.environ.get('SUGGESTIONS_ENABLED', 'false')
+    DEFAULTS['M4B_ENABLED'] = os.environ.get('M4B_ENABLED', 'true')
+    DEFAULTS['M4B_TRIGGER_ABS_SCAN'] = os.environ.get('M4B_TRIGGER_ABS_SCAN', 'false')
+    DEFAULTS['M4B_REPLACE_IF_EXISTS'] = os.environ.get('M4B_REPLACE_IF_EXISTS', 'false')
 
     if request.method == 'POST':
         bool_keys = [
@@ -699,7 +707,10 @@ def settings():
             'TELEGRAM_ENABLED',
             'SUGGESTIONS_ENABLED',
             'ABS_ONLY_SEARCH_IN_ABS_LIBRARY_ID',
-            'USE_EXTERNAL_TRANSCRIBER'
+            'USE_EXTERNAL_TRANSCRIBER',
+            'M4B_ENABLED',
+            'M4B_TRIGGER_ABS_SCAN',
+            'M4B_REPLACE_IF_EXISTS'
         ]
 
         # Current settings in DB
@@ -852,6 +863,12 @@ def index():
             'kosync_doc_id': book.kosync_doc_id,
             'transcript_file': book.transcript_file,
             'status': book.status,
+            'm4b_status': getattr(book, 'm4b_status', 'pending'),
+            'm4b_progress': round(float(getattr(book, 'm4b_progress', 0.0) or 0.0) * 100, 1),
+            'm4b_output_file': getattr(book, 'm4b_output_file', None),
+            'm4b_source_paths': getattr(book, 'm4b_source_paths', None),
+            'm4b_path_strategy': getattr(book, 'm4b_path_strategy', None),
+            'm4b_error': getattr(book, 'm4b_error', None),
             'sync_mode': getattr(book, 'sync_mode', 'audiobook'),
             'unified_progress': 0,
             'duration': book.duration or 0,
@@ -1445,6 +1462,12 @@ def api_status():
             'kosync_doc_id': book.kosync_doc_id,
             'transcript_file': book.transcript_file,
             'status': book.status,
+            'm4b_status': getattr(book, 'm4b_status', 'pending'),
+            'm4b_progress': round(float(getattr(book, 'm4b_progress', 0.0) or 0.0) * 100, 1),
+            'm4b_output_file': getattr(book, 'm4b_output_file', None),
+            'm4b_source_paths': getattr(book, 'm4b_source_paths', None),
+            'm4b_path_strategy': getattr(book, 'm4b_path_strategy', None),
+            'm4b_error': getattr(book, 'm4b_error', None),
             'sync_mode': getattr(book, 'sync_mode', 'audiobook'), # Default to audiobook for existing
             'duration': book.duration,
             'states': {}

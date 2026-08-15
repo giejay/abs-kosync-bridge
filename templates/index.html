@@ -40,6 +40,20 @@
         <div class="book-overlay">
             <div class="book-title">{{ mapping.abs_title }}</div>
             <div class="book-filename">{{ mapping.ebook_filename }}</div>
+            <div class="book-filename" title="M4B conversion status">
+                M4B: {{ mapping.m4b_status|default('pending') }}
+                {% if mapping.m4b_status in ['detecting_chapters', 'converting'] %}
+                ({{ mapping.m4b_progress|default(0) }}%)
+                {% elif mapping.m4b_status == 'failed' and mapping.m4b_error %}
+                - {{ mapping.m4b_error }}
+                {% endif %}
+            </div>
+            {% if mapping.m4b_path_strategy or mapping.m4b_output_file %}
+            <div class="book-filename" title="M4B path diagnostics">
+                {% if mapping.m4b_path_strategy %}{{ mapping.m4b_path_strategy }}{% endif %}
+                {% if mapping.m4b_output_file %} | out: {{ mapping.m4b_output_file }}{% endif %}
+            </div>
+            {% endif %}
 
             {% if mapping.status == 'active' %}
             <div class="progress-details">

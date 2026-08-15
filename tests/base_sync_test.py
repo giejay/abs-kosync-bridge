@@ -225,6 +225,7 @@ class BaseSyncCycleTestCase(unittest.TestCase, ABC):
             booklore_client=mocks['booklore_client'],
             hardcover_client=mocks['hardcover_client'],
             transcriber=transcriber,
+            m4b_service=Mock(),
             ebook_parser=mocks['ebook_parser'],
             database_service=mocks['database_service'],
             storyteller_client=mocks['storyteller_db'],

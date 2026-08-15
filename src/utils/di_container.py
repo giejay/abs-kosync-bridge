@@ -25,6 +25,9 @@ from src.sync_clients.storyteller_sync_client import StorytellerSyncClient
 from src.sync_clients.booklore_sync_client import BookloreSyncClient
 from src.sync_clients.abs_ebook_sync_client import ABSEbookSyncClient
 from src.sync_clients.hardcover_sync_client import HardcoverSyncClient
+from src.m4b.chapter_detector import ChapterDetector
+from src.m4b.ffmpeg_m4b_converter import FfmpegM4BConverter
+from src.m4b.m4b_service import M4BService
 from src.sync_manager import SyncManager
 
 logger = logging.getLogger(__name__)
@@ -105,6 +108,18 @@ class Container(containers.DeclarativeContainer):
         smil_extractor  # [UPDATED] Injected dependency
     )
 
+    chapter_detector = providers.Singleton(ChapterDetector)
+
+    m4b_converter = providers.Singleton(FfmpegM4BConverter)
+
+    m4b_service = providers.Singleton(
+        M4BService,
+        abs_client,
+        database_service,
+        chapter_detector,
+        m4b_converter
+    )
+
     # Sync clients
     abs_sync_client = providers.Singleton(
         ABSSyncClient,
@@ -163,6 +178,7 @@ class Container(containers.DeclarativeContainer):
         hardcover_client=hardcover_client,
         storyteller_client=storyteller_client,
         transcriber=transcriber,
+        m4b_service=m4b_service,
         ebook_parser=ebook_parser,
         database_service=database_service,
         sync_clients=sync_clients,
