@@ -38,6 +38,15 @@ class ChapterDetector:
         if not segments:
             return [{"start": 0.0, "title": "Chapter 1"}]
 
+        inferred_duration = max((float(seg.get("end", 0.0) or 0.0) for seg in segments), default=0.0)
+        effective_total_duration = float(total_duration or 0.0)
+        if effective_total_duration <= 0 and inferred_duration > 0:
+            logger.debug(
+                "[M4B][ChapterDetector] total_duration missing/zero; using transcript inferred duration %.2f",
+                inferred_duration,
+            )
+            effective_total_duration = inferred_duration
+
         effective_language = language or self.default_language
         if str(effective_language).lower() == "auto":
             profile_en = get_profile("en")
@@ -60,7 +69,7 @@ class ChapterDetector:
             profile.markers,
             profile.excluded_phrases,
             len(segments),
-            total_duration,
+            effective_total_duration,
         )
         if not self.verbose_debug:
             logger.debug("[M4B][ChapterDetector] verbose per-segment logging disabled (set M4B_CHAPTER_DEBUG_VERBOSE=true to enable)")
@@ -120,7 +129,7 @@ class ChapterDetector:
             seen_starts.add(rounded_start)
             logger.debug("[M4B][ChapterDetector] detected marker=%s title=%s start=%.2f", marker, title, start)
 
-        starts = [c for c in starts if c["start"] < total_duration]
+        starts = [c for c in starts if c["start"] < effective_total_duration or effective_total_duration <= 0]
         starts.sort(key=lambda x: x["start"])
 
         if logger.isEnabledFor(logging.DEBUG):
