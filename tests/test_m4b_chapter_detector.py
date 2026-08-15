@@ -95,6 +95,24 @@ class TestM4BChapterDetector(unittest.TestCase):
         self.assertIn(180, starts)
         self.assertNotIn(240, starts)
 
+    def test_skips_standalone_backtrack_after_marker_progression(self):
+        detector = ChapterDetector(default_language="auto")
+        segments = [
+            {"start": 0, "end": 5, "text": "Proloog"},
+            {"start": 60, "end": 62, "text": "Hoofdstuk 1"},
+            {"start": 120, "end": 122, "text": "Hoofdstuk 2"},
+            {"start": 180, "end": 182, "text": "Hoofdstuk 3"},
+            {"start": 240, "end": 241, "text": "2"},
+        ]
+
+        chapters = detector.detect_from_segments(segments, total_duration=800, language="auto")
+        starts = [int(c["start"]) for c in chapters]
+
+        self.assertIn(60, starts)
+        self.assertIn(120, starts)
+        self.assertIn(180, starts)
+        self.assertNotIn(240, starts)
+
 
 if __name__ == "__main__":
     unittest.main()

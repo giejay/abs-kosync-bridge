@@ -43,7 +43,7 @@ class TestM4BChapterDetectorDebug(unittest.TestCase):
         summary = {int(c["start"]): c["title"] for c in chapters}
 
         self.assertEqual(summary[60], "Chapter 50")
-        self.assertEqual(summary[130], "Chapter 50")
+        self.assertNotIn(130, summary)
 
 
 if __name__ == "__main__":
