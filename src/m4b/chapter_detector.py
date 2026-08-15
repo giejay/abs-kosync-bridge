@@ -17,6 +17,7 @@ class ChapterDetector:
 
     def __init__(self, default_language: str = "en"):
         self.default_language = default_language
+        self.verbose_debug = str(__import__("os").getenv("M4B_CHAPTER_DEBUG_VERBOSE", "false")).lower() == "true"
 
     def detect_from_transcript(
         self,
@@ -61,12 +62,14 @@ class ChapterDetector:
             len(segments),
             total_duration,
         )
+        if not self.verbose_debug:
+            logger.debug("[M4B][ChapterDetector] verbose per-segment logging disabled (set M4B_CHAPTER_DEBUG_VERBOSE=true to enable)")
 
         for idx, seg in enumerate(segments):
             text = str(seg.get("text", "")).strip().lower()
             start = float(seg.get("start", 0.0) or 0.0)
 
-            if logger.isEnabledFor(logging.DEBUG):
+            if self.verbose_debug and logger.isEnabledFor(logging.DEBUG):
                 logger.debug(
                     "[M4B][ChapterDetector] seg=%s start=%.2f text=%r",
                     idx,
@@ -75,30 +78,34 @@ class ChapterDetector:
                 )
 
             if not text or any(excluded in text for excluded in profile.excluded_phrases):
-                logger.debug(
-                    "[M4B][ChapterDetector] skip seg=%s reason=%s",
-                    idx,
-                    "empty_text" if not text else "excluded_phrase",
-                )
+                if self.verbose_debug:
+                    logger.debug(
+                        "[M4B][ChapterDetector] skip seg=%s reason=%s",
+                        idx,
+                        "empty_text" if not text else "excluded_phrase",
+                    )
                 continue
 
             marker = self._match_marker(text, profile.markers)
             if not marker:
-                logger.debug("[M4B][ChapterDetector] skip seg=%s reason=no_marker", idx)
+                if self.verbose_debug:
+                    logger.debug("[M4B][ChapterDetector] skip seg=%s reason=no_marker", idx)
                 continue
 
             rounded_start = int(start)
             if rounded_start in seen_starts:
-                logger.debug("[M4B][ChapterDetector] skip seg=%s reason=duplicate_start start=%s", idx, rounded_start)
+                if self.verbose_debug:
+                    logger.debug("[M4B][ChapterDetector] skip seg=%s reason=duplicate_start start=%s", idx, rounded_start)
                 continue
             if len(starts) > 1 and (rounded_start - int(starts[-1]["start"])) < min_gap_seconds:
-                logger.debug(
-                    "[M4B][ChapterDetector] skip seg=%s reason=min_gap start=%s last=%s gap=%s",
-                    idx,
-                    rounded_start,
-                    int(starts[-1]["start"]),
-                    rounded_start - int(starts[-1]["start"]),
-                )
+                if self.verbose_debug:
+                    logger.debug(
+                        "[M4B][ChapterDetector] skip seg=%s reason=min_gap start=%s last=%s gap=%s",
+                        idx,
+                        rounded_start,
+                        int(starts[-1]["start"]),
+                        rounded_start - int(starts[-1]["start"]),
+                    )
                 continue
 
             if marker in ("prologue", "proloog"):
@@ -111,16 +118,16 @@ class ChapterDetector:
 
             starts.append({"start": start, "title": title})
             seen_starts.add(rounded_start)
-            logger.debug(
-                "[M4B][ChapterDetector] detected seg=%s marker=%s title=%s start=%.2f",
-                idx,
-                marker,
-                title,
-                start,
-            )
+            logger.debug("[M4B][ChapterDetector] detected marker=%s title=%s start=%.2f", marker, title, start)
 
         starts = [c for c in starts if c["start"] < total_duration]
         starts.sort(key=lambda x: x["start"])
+
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(
+                "[M4B][ChapterDetector] chapter_start_summary=%s",
+                [f"{c['title']}@{c['start']:.1f}" for c in starts],
+            )
 
         logger.info("[M4B] Detected %s chapter markers", max(0, len(starts) - 1))
         return starts
@@ -129,10 +136,7 @@ class ChapterDetector:
     def _match_marker(text: str, markers: tuple[str, ...]) -> str | None:
         for marker in markers:
             pattern = rf"\b{re.escape(marker)}\b"
-            if logger.isEnabledFor(logging.DEBUG):
-                logger.debug("[M4B][ChapterDetector] marker_check text=%r marker=%r pattern=%r", text[:120], marker, pattern)
             if re.search(pattern, text, re.IGNORECASE):
-                logger.debug("[M4B][ChapterDetector] marker_match text=%r marker=%r", text[:120], marker)
                 return marker
         return None
 
