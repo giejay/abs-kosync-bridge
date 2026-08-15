@@ -793,6 +793,47 @@
             .mt-80 {
                 margin-top: 80px !important;
             }
+
+            .force-sync-modal {
+                position: fixed;
+                inset: 0;
+                display: none;
+                align-items: center;
+                justify-content: center;
+                background: rgba(0, 0, 0, 0.65);
+                z-index: 5000;
+            }
+
+            .force-sync-modal.open {
+                display: flex;
+            }
+
+            .force-sync-modal-content {
+                width: min(92vw, 420px);
+                background: #161616;
+                border: 1px solid rgba(255, 255, 255, 0.14);
+                border-radius: 10px;
+                padding: 16px;
+            }
+
+            .force-sync-modal-title {
+                font-size: 16px;
+                font-weight: 700;
+                margin-bottom: 8px;
+            }
+
+            .force-sync-modal-text {
+                font-size: 12px;
+                color: rgba(255, 255, 255, 0.72);
+                margin-bottom: 12px;
+            }
+
+            .force-sync-modal-actions {
+                margin-top: 14px;
+                display: flex;
+                gap: 8px;
+                justify-content: flex-end;
+            }
         </style>
     </head>
 
@@ -975,12 +1016,29 @@
                 {% endif %}
         </div>
 
+        <div id="force-sync-modal" class="force-sync-modal" role="dialog" aria-modal="true" aria-labelledby="force-sync-modal-title">
+            <div class="force-sync-modal-content">
+                <div id="force-sync-modal-title" class="force-sync-modal-title">Force Sync Leader</div>
+                <div class="force-sync-modal-text">Pick the app to lead this sync. Backtracking is allowed for this manual sync.</div>
+                <label for="force-sync-leader-select" class="force-sync-modal-text">Leader app</label>
+                <select id="force-sync-leader-select"></select>
+                <div class="force-sync-modal-actions">
+                    <button type="button" class="action-btn" onclick="closeForceSyncModal()">Cancel</button>
+                    <button type="button" class="action-btn info" onclick="confirmForceSyncModal()">Start Sync</button>
+                </div>
+            </div>
+        </div>
+
         <script>
             const currentlyReadingGrid = document.getElementById('currently-reading-grid');
             const allBooksGrid = document.getElementById('all-books-grid');
             const sortSelect = document.getElementById('sort-select');
             const filterSelect = document.getElementById('filter-select');
             const directionBtn = document.getElementById('sort-direction');
+            const forceSyncModal = document.getElementById('force-sync-modal');
+            const forceSyncLeaderSelect = document.getElementById('force-sync-leader-select');
+
+            let pendingForceSync = null;
 
             function filterBooks() {
                 const filterValue = filterSelect.value;
@@ -1068,12 +1126,35 @@
                 const allowedLeaders = syncMode === 'ebook_only'
                     ? ['KoSync', 'Storyteller', 'Booklore', 'ABSEbook']
                     : ['ABS', 'KoSync', 'Storyteller', 'Booklore'];
-                const selected = prompt(`Choose leader app for this force sync.\n\nOptions: ${allowedLeaders.join(', ')}\n\nBacktracking is allowed.`);
-                if (selected === null) return;
 
-                const leader = (selected || '').trim();
-                if (!allowedLeaders.includes(leader)) {
-                    alert(`Unknown leader app: ${selected}. Use exactly one of: ${allowedLeaders.join(', ')}`);
+                pendingForceSync = { absId, allowedLeaders };
+                forceSyncLeaderSelect.innerHTML = '';
+                allowedLeaders.forEach((leader) => {
+                    const option = document.createElement('option');
+                    option.value = leader;
+                    option.textContent = leader;
+                    forceSyncLeaderSelect.appendChild(option);
+                });
+
+                forceSyncModal.classList.add('open');
+                forceSyncLeaderSelect.focus();
+            }
+
+            function closeForceSyncModal() {
+                forceSyncModal.classList.remove('open');
+                pendingForceSync = null;
+            }
+
+            function confirmForceSyncModal() {
+                if (!pendingForceSync || !pendingForceSync.absId) {
+                    closeForceSyncModal();
+                    return;
+                }
+
+                const absId = pendingForceSync.absId;
+                const leader = forceSyncLeaderSelect.value;
+                if (!pendingForceSync.allowedLeaders.includes(leader)) {
+                    alert('Please choose a valid leader app.');
                     return;
                 }
 
@@ -1093,7 +1174,21 @@
                         console.error('Force sync error:', err);
                         alert('Failed to trigger force sync. Check logs for details.');
                     });
+
+                closeForceSyncModal();
             }
+
+            forceSyncModal.addEventListener('click', (event) => {
+                if (event.target === forceSyncModal) {
+                    closeForceSyncModal();
+                }
+            });
+
+            document.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape' && forceSyncModal.classList.contains('open')) {
+                    closeForceSyncModal();
+                }
+            });
 
             function forceCreateM4B(event, absId) {
                 event.stopPropagation();
