@@ -1285,10 +1285,10 @@ def force_sync(abs_id):
                 logger.error(f"Force sync failed for {abs_id}: {e}")
 
         threading.Thread(target=run_targeted_sync, daemon=True).start()
-        return jsonify({"success": True, "message": f"Force sync triggered for {abs_id}"}), 202
+        return redirect(url_for('index'))
     except Exception as e:
         logger.error(f"Failed to trigger force sync for {abs_id}: {e}")
-        return jsonify({"success": False, "error": "Failed to trigger sync"}), 500
+        return redirect(url_for('index'))
 
 
 def link_hardcover(abs_id):
