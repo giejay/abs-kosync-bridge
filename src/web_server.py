@@ -1308,6 +1308,28 @@ def force_sync(abs_id):
         return redirect(url_for('index'))
 
 
+def force_create_m4b(abs_id):
+    """Trigger an immediate M4B rebuild for a single mapped book."""
+    from flask import flash
+
+    try:
+        book = database_service.get_book(abs_id)
+        if not book:
+            flash("❌ Book not found", "error")
+            return redirect(url_for('index'))
+
+        result = manager.force_create_m4b(abs_id)
+        if result.get("success"):
+            flash(f"✅ M4B created for {book.abs_title or abs_id}", "success")
+        else:
+            flash("❌ M4B creation failed", "error")
+    except Exception as e:
+        logger.error(f"Failed to force-create M4B for {abs_id}: {e}")
+        flash(f"❌ M4B creation failed: {e}", "error")
+
+    return redirect(url_for('index'))
+
+
 def link_hardcover(abs_id):
     from flask import flash
     url = request.form.get('hardcover_url', '').strip()
@@ -1810,6 +1832,7 @@ def create_app(test_container=None):
     app.add_url_rule('/delete/<abs_id>', 'delete_mapping', delete_mapping, methods=['POST'])
     app.add_url_rule('/clear-progress/<abs_id>', 'clear_progress', clear_progress, methods=['POST'])
     app.add_url_rule('/force-sync/<abs_id>', 'force_sync', force_sync, methods=['POST'])
+    app.add_url_rule('/force-create-m4b/<abs_id>', 'force_create_m4b', force_create_m4b, methods=['POST'])
     app.add_url_rule('/link-hardcover/<abs_id>', 'link_hardcover', link_hardcover, methods=['POST'])
     app.add_url_rule('/update-hash/<abs_id>', 'update_hash', update_hash, methods=['POST'])
     app.add_url_rule('/covers/<path:filename>', 'serve_cover', serve_cover)

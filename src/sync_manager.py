@@ -550,7 +550,7 @@ class SyncManager:
         )
         self._job_thread.start()
 
-    def _run_background_job(self, book: Book, job_idx=1, job_total=1):
+    def _run_background_job(self, book: Book, job_idx=1, job_total=1, force_m4b=False):
         """
         Threaded worker that handles transcription without blocking the main loop.
         """
@@ -625,7 +625,8 @@ class SyncManager:
                         book,
                         Path(transcript_path),
                         item_details,
-                        progress_callback=lambda p: update_progress(p, 3)
+                        progress_callback=lambda p: update_progress(p, 3),
+                        force=force_m4b
                     )
             except Exception as m4b_exc:
                 logger.warning(f"[M4B] Conversion failed for {sanitize_log_data(abs_title)}: {m4b_exc}")
@@ -1099,6 +1100,35 @@ class SyncManager:
             logger.error(error_msg)
             logger.error(traceback.format_exc())
             raise RuntimeError(error_msg) from e
+
+    def force_create_m4b(self, abs_id):
+        """Force rebuild the M4B for a single mapped book."""
+        try:
+            book = self.database_service.get_book(abs_id)
+            if not book:
+                raise ValueError(f"Book not found: {abs_id}")
+
+            if not book.transcript_file or not Path(book.transcript_file).exists():
+                raise FileNotFoundError("Transcript not available for forced M4B creation")
+
+            item_details = self.abs_client.get_item_details(abs_id)
+            if not item_details:
+                raise RuntimeError("Could not load Audiobookshelf item details")
+
+            self.m4b_service.process_book(
+                book,
+                Path(book.transcript_file),
+                item_details,
+                force=True
+            )
+            return {
+                "success": True,
+                "status": getattr(book, "m4b_status", None),
+                "output_file": getattr(book, "m4b_output_file", None),
+            }
+        except Exception as e:
+            logger.error(f"[M4B] Force create failed for {abs_id}: {e}")
+            raise
 
     def run_daemon(self):
         """Legacy method - daemon is now run from web_server.py"""

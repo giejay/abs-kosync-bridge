@@ -40,7 +40,8 @@
         <div class="book-overlay">
             <div class="book-title">{{ mapping.abs_title }}</div>
             <div class="book-filename">{{ mapping.ebook_filename }}</div>
-            <div class="book-filename" title="M4B conversion status">
+            <div class="book-filename cursor-pointer" title="Click to force-create M4B"
+                onclick="forceCreateM4B(event, '{{ mapping.abs_id }}')">
                 M4B: {{ mapping.m4b_status|default('pending') }}
                 {% if mapping.m4b_status in ['detecting_chapters', 'converting'] %}
                 ({{ mapping.m4b_progress|default(0) }}%)
@@ -1074,6 +1075,23 @@
                     .catch(err => {
                         console.error('Force sync error:', err);
                         alert('Failed to trigger force sync. Check logs for details.');
+                    });
+            }
+
+            function forceCreateM4B(event, absId) {
+                event.stopPropagation();
+                if (!absId) return;
+
+                if (!confirm('Force create or rebuild the M4B for this book?')) {
+                    return;
+                }
+
+                fetch(`/force-create-m4b/${encodeURIComponent(absId)}`, { method: 'POST' })
+                    .then(r => r.text())
+                    .then(() => window.location.reload())
+                    .catch(err => {
+                        console.error('Force M4B error:', err);
+                        alert('Failed to trigger M4B creation. Check logs for details.');
                     });
             }
 

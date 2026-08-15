@@ -41,7 +41,9 @@ class M4BService:
         transcript_path: Path,
         item_details: dict | None,
         progress_callback: Callable[[float], None] | None = None,
+        force: bool = False,
     ) -> None:
+        logger.info("[M4B] Processing %s (force=%s)", getattr(book, "abs_title", book.abs_id), force)
         if not self.enabled:
             self._update_book(book, status="skipped", error=None)
             return
@@ -83,7 +85,7 @@ class M4BService:
             source_paths=source_paths,
             path_strategy=self._compress_strategies(strategies, output_strategy),
         )
-        if output_path.exists() and not self.replace_if_exists:
+        if output_path.exists() and not (force or self.replace_if_exists):
             self._update_book(
                 book,
                 status="completed",
