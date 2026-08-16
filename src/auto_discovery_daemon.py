@@ -8,6 +8,7 @@ attempts to fetch their ebooks, and creates sync jobs automatically.
 import logging
 import os
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Set, Optional
 import requests
@@ -55,6 +56,7 @@ class AutoDiscoveryDaemon:
         next_playlist_env = os.environ.get("AUTO_DISCOVERY_NEXT_PLAYLIST")
         self.next_playlist_name = (next_playlist_env or "Next").strip() or "Next"
         self.next_playlist_from_env = bool(next_playlist_env and next_playlist_env.strip())
+        self._item_title_cache: dict[str, str] = {}
 
         # Setup cache directory
         data_dir = Path(os.environ.get("DATA_DIR", "/data"))
@@ -79,6 +81,49 @@ class AutoDiscoveryDaemon:
             or flat_meta.get('title')
             or "Unknown"
         )
+
+    @staticmethod
+    def _format_unix_timestamp(ts: float | int | None) -> str:
+        """Convert unix timestamp (seconds) to readable UTC string for logs."""
+        try:
+            if ts is None:
+                return "n/a"
+            return datetime.fromtimestamp(float(ts), tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+        except Exception:
+            return f"invalid({ts})"
+
+    def _get_item_title_for_log(self, item_id: str, progress_data: dict) -> str:
+        """Return a sanitized title, fetching item details when progress payload lacks it."""
+        title = self._extract_progress_item_title(progress_data)
+        if title and title != "Unknown":
+            return sanitize_log_data(title)
+
+        cached = self._item_title_cache.get(item_id)
+        if cached:
+            return sanitize_log_data(cached)
+
+        details = None
+        try:
+            # Prefer expanded item payload (compatible with ABS /api/items/{id}?expanded=1&include=...)
+            details = self.abs_client.get_item_details(
+                item_id,
+                expanded=True,
+                include="progress,rssfeed,authors",
+            )
+        except TypeError:
+            # Backward-compatible fallback for clients that only accept item_id.
+            details = self.abs_client.get_item_details(item_id)
+        except Exception as exc:
+            logger.debug(f"[{item_id}] Failed fetching item details for title lookup: {exc}")
+
+        resolved_title = "Unknown"
+        if isinstance(details, dict):
+            media = details.get('media', {})
+            metadata = media.get('metadata', {})
+            resolved_title = metadata.get('title') or details.get('title') or "Unknown"
+
+        self._item_title_cache[item_id] = resolved_title
+        return sanitize_log_data(resolved_title)
 
     def _get_next_playlist(self) -> Optional[dict]:
         if not hasattr(self.abs_client, "get_playlist_by_name"):
@@ -188,7 +233,7 @@ class AutoDiscoveryDaemon:
             logger.debug(
                 "[auto-discovery] Evaluating %d progress item(s), cutoff=%s (%d day lookback)",
                 len(progress_map),
-                int(cutoff_timestamp),
+                self._format_unix_timestamp(cutoff_timestamp),
                 self.lookback_days,
             )
 
@@ -204,13 +249,15 @@ class AutoDiscoveryDaemon:
             }
             for item_id, progress_data in progress_map.items():
                 stats['total'] += 1
-                title = sanitize_log_data(self._extract_progress_item_title(progress_data))
                 # Skip completed/finished books
                 is_finished = progress_data.get('isFinished', False)
                 if is_finished:
                     stats['finished'] += 1
+                    title = sanitize_log_data(self._extract_progress_item_title(progress_data))
                     logger.debug(f"[{item_id}] '{title}' Skipping completed book")
                     continue
+
+                title = self._get_item_title_for_log(item_id, progress_data)
 
                 # Check if item was updated recently
                 last_update = progress_data.get('lastUpdate', 0)
@@ -232,7 +279,8 @@ class AutoDiscoveryDaemon:
                                 stats['accepted'] += 1
                                 logger.debug(
                                     f"[{item_id}] '{title}' Accepted: currentTime={current_time}, "
-                                    f"duration={duration}, progress={progress_pct:.4f}, lastUpdate={last_update}"
+                                    f"duration={duration}, progress={progress_pct:.4f}, "
+                                    f"lastUpdate={self._format_unix_timestamp(last_update)}"
                                 )
                                 recent_items.append({
                                     'id': item_id,
@@ -254,7 +302,8 @@ class AutoDiscoveryDaemon:
                         stats['too_old'] += 1
                         logger.debug(
                             f"[{item_id}] '{title}' Excluded because lastUpdate is too old: "
-                            f"lastUpdate={last_update}, cutoff={cutoff_timestamp}"
+                            f"lastUpdate={self._format_unix_timestamp(last_update)}, "
+                            f"cutoff={self._format_unix_timestamp(cutoff_timestamp)}"
                         )
                 else:
                     stats['invalid_last_update'] += 1

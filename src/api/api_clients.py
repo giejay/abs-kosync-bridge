@@ -105,10 +105,15 @@ class ABSClient:
             logger.error(f"Error getting audio files: {e}")
             return []
 
-    def get_item_details(self, item_id):
+    def get_item_details(self, item_id, expanded=False, include=None):
         url = f"{self.base_url}/api/items/{item_id}"
+        params = {}
+        if expanded:
+            params["expanded"] = 1
+        if include:
+            params["include"] = include
         try:
-            r = self.session.get(url)
+            r = self.session.get(url, params=params or None)
             if r.status_code == 200: return r.json()
         except Exception:
             pass
