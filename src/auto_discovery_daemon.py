@@ -168,12 +168,29 @@ class AutoDiscoveryDaemon:
 
             # Calculate cutoff timestamp (current time - lookback_days)
             cutoff_timestamp = time.time() - (self.lookback_days * 24 * 60 * 60)
+            logger.debug(
+                "[auto-discovery] Evaluating %d progress item(s), cutoff=%s (%d day lookback)",
+                len(progress_map),
+                int(cutoff_timestamp),
+                self.lookback_days,
+            )
 
             recent_items = []
+            stats = {
+                'total': 0,
+                'finished': 0,
+                'invalid_last_update': 0,
+                'too_old': 0,
+                'invalid_duration': 0,
+                'invalid_progress': 0,
+                'accepted': 0,
+            }
             for item_id, progress_data in progress_map.items():
+                stats['total'] += 1
                 # Skip completed/finished books
                 is_finished = progress_data.get('isFinished', False)
                 if is_finished:
+                    stats['finished'] += 1
                     logger.debug(f"[{item_id}] Skipping completed book")
                     continue
 
@@ -182,6 +199,7 @@ class AutoDiscoveryDaemon:
                 if isinstance(last_update, (int, float)):
                     # Convert from milliseconds if needed
                     if last_update > 10000000000:  # Likely milliseconds
+                        logger.debug(f"[{item_id}] Converting lastUpdate from ms to s: {last_update}")
                         last_update = last_update / 1000.0
 
                     if last_update >= cutoff_timestamp:
@@ -193,6 +211,7 @@ class AutoDiscoveryDaemon:
                             progress_pct = current_time / duration
                             # Include items with at least 1% progress but not finished
                             if 0.01 <= progress_pct < 1.0:
+                                stats['accepted'] += 1
                                 recent_items.append({
                                     'id': item_id,
                                     'duration': duration,
@@ -200,9 +219,39 @@ class AutoDiscoveryDaemon:
                                     'progress': progress_pct,
                                     'lastUpdate': last_update
                                 })
+                            else:
+                                stats['invalid_progress'] += 1
+                                logger.debug(
+                                    f"[{item_id}] Excluded by progress threshold: currentTime={current_time}, "
+                                    f"duration={duration}, progress={progress_pct:.4f}"
+                                )
+                        else:
+                            stats['invalid_duration'] += 1
+                            logger.debug(f"[{item_id}] Excluded because duration is not > 0: duration={duration}")
+                    else:
+                        stats['too_old'] += 1
+                        logger.debug(
+                            f"[{item_id}] Excluded because lastUpdate is too old: "
+                            f"lastUpdate={last_update}, cutoff={cutoff_timestamp}"
+                        )
+                else:
+                    stats['invalid_last_update'] += 1
+                    logger.debug(
+                        f"[{item_id}] Excluded because lastUpdate is non-numeric: "
+                        f"value={last_update!r}, type={type(last_update).__name__}"
+                    )
+
+            logger.debug(
+                "[auto-discovery] Filter summary: total=%(total)d, accepted=%(accepted)d, "
+                "finished=%(finished)d, too_old=%(too_old)d, invalid_last_update=%(invalid_last_update)d, "
+                "invalid_duration=%(invalid_duration)d, invalid_progress=%(invalid_progress)d",
+                stats,
+            )
 
             if recent_items:
                 logger.info(f"📊 Found {len(recent_items)} recently played items")
+            else:
+                logger.info("📊 Found 0 recently played items after filtering")
 
             return recent_items
 
