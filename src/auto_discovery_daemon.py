@@ -63,6 +63,23 @@ class AutoDiscoveryDaemon:
 
         logger.info(f"🔍 Auto-discovery daemon initialized (lookback: {lookback_days} days)")
 
+    @staticmethod
+    def _extract_progress_item_title(progress_data: dict) -> str:
+        """Best-effort title extraction for ABS progress payloads used in logs."""
+        if not isinstance(progress_data, dict):
+            return "Unknown"
+
+        media_meta = (progress_data.get('media') or {}).get('metadata') or {}
+        flat_meta = progress_data.get('mediaMetadata') or {}
+
+        return (
+            progress_data.get('title')
+            or progress_data.get('libraryItemTitle')
+            or media_meta.get('title')
+            or flat_meta.get('title')
+            or "Unknown"
+        )
+
     def _get_next_playlist(self) -> Optional[dict]:
         if not hasattr(self.abs_client, "get_playlist_by_name"):
             logger.warning("Auto-discovery playlist sync unavailable: ABS client has no playlist helpers")
@@ -187,11 +204,12 @@ class AutoDiscoveryDaemon:
             }
             for item_id, progress_data in progress_map.items():
                 stats['total'] += 1
+                title = sanitize_log_data(self._extract_progress_item_title(progress_data))
                 # Skip completed/finished books
                 is_finished = progress_data.get('isFinished', False)
                 if is_finished:
                     stats['finished'] += 1
-                    logger.debug(f"[{item_id}] Skipping completed book")
+                    logger.debug(f"[{item_id}] '{title}' Skipping completed book")
                     continue
 
                 # Check if item was updated recently
@@ -199,7 +217,7 @@ class AutoDiscoveryDaemon:
                 if isinstance(last_update, (int, float)):
                     # Convert from milliseconds if needed
                     if last_update > 10000000000:  # Likely milliseconds
-                        logger.debug(f"[{item_id}] Converting lastUpdate from ms to s: {last_update}")
+                        logger.debug(f"[{item_id}] '{title}' Converting lastUpdate from ms to s: {last_update}")
                         last_update = last_update / 1000.0
 
                     if last_update >= cutoff_timestamp:
@@ -212,6 +230,10 @@ class AutoDiscoveryDaemon:
                             # Include items with at least 1% progress but not finished
                             if 0.01 <= progress_pct < 1.0:
                                 stats['accepted'] += 1
+                                logger.debug(
+                                    f"[{item_id}] '{title}' Accepted: currentTime={current_time}, "
+                                    f"duration={duration}, progress={progress_pct:.4f}, lastUpdate={last_update}"
+                                )
                                 recent_items.append({
                                     'id': item_id,
                                     'duration': duration,
@@ -222,22 +244,22 @@ class AutoDiscoveryDaemon:
                             else:
                                 stats['invalid_progress'] += 1
                                 logger.debug(
-                                    f"[{item_id}] Excluded by progress threshold: currentTime={current_time}, "
+                                    f"[{item_id}] '{title}' Excluded by progress threshold: currentTime={current_time}, "
                                     f"duration={duration}, progress={progress_pct:.4f}"
                                 )
                         else:
                             stats['invalid_duration'] += 1
-                            logger.debug(f"[{item_id}] Excluded because duration is not > 0: duration={duration}")
+                            logger.debug(f"[{item_id}] '{title}' Excluded because duration is not > 0: duration={duration}")
                     else:
                         stats['too_old'] += 1
                         logger.debug(
-                            f"[{item_id}] Excluded because lastUpdate is too old: "
+                            f"[{item_id}] '{title}' Excluded because lastUpdate is too old: "
                             f"lastUpdate={last_update}, cutoff={cutoff_timestamp}"
                         )
                 else:
                     stats['invalid_last_update'] += 1
                     logger.debug(
-                        f"[{item_id}] Excluded because lastUpdate is non-numeric: "
+                        f"[{item_id}] '{title}' Excluded because lastUpdate is non-numeric: "
                         f"value={last_update!r}, type={type(last_update).__name__}"
                     )
 
