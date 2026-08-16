@@ -150,6 +150,8 @@ services:
       # - M4B_PATH_MAPPINGS=/mnt/media/audiobooks=>/audiobooks
       # Trigger ABS library scan after M4B creation (best effort)
       - M4B_TRIGGER_ABS_SCAN=false
+      # If true, only detected chapters are posted to ABS without writing an .m4b file
+      - M4B_SKIP_FILE_CREATION=false
       # If false, existing .m4b files are kept and not overwritten
       - M4B_REPLACE_IF_EXISTS=false
       # auto = recognize both English and Dutch chapter markers

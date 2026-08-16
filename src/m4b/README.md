@@ -18,7 +18,10 @@ This package adds automatic M4B generation from ABS audiobook source files.
 - `M4B_PATH_MAPPINGS` (`host_prefix=>container_prefix;...`)
 - `M4B_REPLACE_IF_EXISTS` (default: `false`)
 - `M4B_TRIGGER_ABS_SCAN` (default: `false`)
+- `M4B_SKIP_FILE_CREATION` (default: `false`, updates ABS chapters only and skips writing `.m4b`)
 - `M4B_LANGUAGE` (default: `auto`, recognizes both English and Dutch markers)
+
+When file creation is enabled, the generated `.m4b` filename uses the first resolved source audio filename stem (for example, `track01.mp3` -> `track01.m4b`).
 
 ## Quick local test
 

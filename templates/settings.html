@@ -913,6 +913,10 @@
                         <input type="checkbox" id="m4b_replace" name="M4B_REPLACE_IF_EXISTS" {% if get_bool('M4B_REPLACE_IF_EXISTS') %}checked{% endif %}>
                         <label for="m4b_replace">Replace existing M4B file if one already exists</label>
                     </div>
+                    <div class="checkbox-wrapper full-width">
+                        <input type="checkbox" id="m4b_skip_file" name="M4B_SKIP_FILE_CREATION" {% if get_bool('M4B_SKIP_FILE_CREATION') %}checked{% endif %}>
+                        <label for="m4b_skip_file">Skip M4B file creation and only post detected chapters to Audiobookshelf</label>
+                    </div>
                 </div>
             </div>
 

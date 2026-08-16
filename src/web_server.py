@@ -698,6 +698,7 @@ def settings():
     DEFAULTS['M4B_ENABLED'] = os.environ.get('M4B_ENABLED', 'true')
     DEFAULTS['M4B_TRIGGER_ABS_SCAN'] = os.environ.get('M4B_TRIGGER_ABS_SCAN', 'false')
     DEFAULTS['M4B_REPLACE_IF_EXISTS'] = os.environ.get('M4B_REPLACE_IF_EXISTS', 'false')
+    DEFAULTS['M4B_SKIP_FILE_CREATION'] = os.environ.get('M4B_SKIP_FILE_CREATION', 'false')
 
     if request.method == 'POST':
         bool_keys = [
@@ -715,7 +716,8 @@ def settings():
             'USE_EXTERNAL_TRANSCRIBER',
             'M4B_ENABLED',
             'M4B_TRIGGER_ABS_SCAN',
-            'M4B_REPLACE_IF_EXISTS'
+            'M4B_REPLACE_IF_EXISTS',
+            'M4B_SKIP_FILE_CREATION'
         ]
 
         # Current settings in DB

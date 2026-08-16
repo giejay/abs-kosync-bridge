@@ -8,9 +8,9 @@ import json
 from pathlib import Path
 from typing import Callable
 
-from src.db.models import Book
 from src.m4b.path_resolver import M4BPathResolver
 
+from src.db.models import Book
 logger = logging.getLogger(__name__)
 
 
@@ -28,6 +28,7 @@ class M4BService:
         self.watch_dir = os.getenv("M4B_UPLOAD_TO_ABS_WATCH_DIR", "").strip()
         self.replace_if_exists = os.getenv("M4B_REPLACE_IF_EXISTS", "false").lower() == "true"
         self.trigger_abs_scan = os.getenv("M4B_TRIGGER_ABS_SCAN", "false").lower() == "true"
+        self.skip_file_creation = os.getenv("M4B_SKIP_FILE_CREATION", "false").lower() == "true"
         self.default_language = os.getenv("M4B_LANGUAGE", "auto")
 
         self.path_resolver = M4BPathResolver(
@@ -60,6 +61,17 @@ class M4BService:
             language=self.default_language,
         )
         self._update_abs_chapters(book, chapters, item_details, transcript_path)
+
+        if self.skip_file_creation:
+            self._update_book(
+                book,
+                status="completed",
+                progress=1.0,
+                output_file="",
+                error=None,
+                path_strategy="chapters_only",
+            )
+            return
 
         if self._is_already_m4b(audio_files):
             self._update_book(book, status="not_needed", progress=1.0, error=None)
@@ -146,7 +158,8 @@ class M4BService:
         return resolved, strategies
 
     def _determine_output_path(self, book: Book, source_paths: list[Path]) -> tuple[Path, str]:
-        target_name = f"{book.abs_title or book.abs_id}.m4b".replace("/", "_").replace("\\", "_")
+        source_stem = source_paths[0].stem if source_paths else (book.abs_id or "output")
+        target_name = f"{source_stem}.m4b"
 
         if self.output_mode == "alongside" and source_paths:
             return source_paths[0].parent / target_name, "alongside"
