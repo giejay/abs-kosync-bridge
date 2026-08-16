@@ -485,6 +485,7 @@ def sync_daemon():
         if auto_discovery_enabled and auto_discovery:
             try:
                 auto_discovery.discover_and_sync()
+                auto_discovery.process_next_playlist_queue()
             except Exception as e:
                 logger.error(f"Initial auto-discovery cycle failed: {e}")
 
